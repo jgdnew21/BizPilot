@@ -1,0 +1,23 @@
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+
+# 虚拟环境
+env/
+venv/
+.venv/
+
+# 日志、临时文件
+logs/
+*.log
+*.tmp
+
+# VSCode 配置
+.vscode/
+.idea/
+
+# 系统垃圾
+.DS_Store

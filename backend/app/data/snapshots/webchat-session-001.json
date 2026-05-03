@@ -1,0 +1,74 @@
+{
+  "snapshot_id": "347b1a55-0d4f-4859-9916-fd39c3fccedf",
+  "session_id": "webchat-session-001",
+  "user_id": "user-001",
+  "user_name": "用户",
+  "status": "submit_failed",
+  "raw_text": "我明天要采购大头鱼 10 斤，供应商是采无忧",
+  "markdown_text": "### 采购需求（待确认）\n\n| # | 商品 | 数量 | 单位 | ERP匹配商品 | 状态 |\n|---|---|---:|---|---|---|\n| 1 | 大头鱼 | 10 | 斤 | 大头鱼 | 已匹配 |\n\n- **供应商**：采无忧 → 采无忧供应有限公司\n- **需求日期**：明天 → 2026-05-04\n- **入库仓库**：南宁仓 → 南宁仓 - 艾达D\n- **录入人**：用户\n\n请回复 **确认** 提交采购申请；如需修改，请直接回复修改内容。",
+  "structured_payload": {
+    "supplier_input": "采无忧",
+    "supplier_standard_name": "采无忧供应有限公司",
+    "supplier": "采无忧供应有限公司",
+    "schedule_date_text": "明天",
+    "schedule_date": "2026-05-04",
+    "warehouse_input": "南宁仓",
+    "warehouse_standard_name": "南宁仓 - 艾达D",
+    "warehouse": "南宁仓 - 艾达D",
+    "items": [
+      {
+        "item_input_name": "大头鱼",
+        "input_name": "大头鱼",
+        "item_code": "002130",
+        "item_name_snapshot": "大头鱼",
+        "item_name": "大头鱼",
+        "qty": 10.0,
+        "uom": "斤",
+        "status": "已匹配"
+      }
+    ]
+  },
+  "created_at": "2026-05-03T16:06:07",
+  "updated_at": "2026-05-03T16:09:33",
+  "event_logs": [
+    {
+      "timestamp": "2026-05-03T16:06:07",
+      "event_type": "purchase_prepare",
+      "raw_payload": {
+        "session_id": "webchat-session-001",
+        "user_id": "user-001",
+        "user_name": "用户",
+        "raw_text": "我明天要采购大头鱼 10 斤，供应商是采无忧"
+      }
+    },
+    {
+      "timestamp": "2026-05-03T16:09:31",
+      "event_type": "purchase_confirm_requested",
+      "raw_payload": {
+        "session_id": "webchat-session-001",
+        "user_id": "user-001",
+        "user_name": "用户",
+        "confirm_text": "确认"
+      }
+    },
+    {
+      "timestamp": "2026-05-03T16:09:33",
+      "event_type": "purchase_submit_failed",
+      "raw_payload": {
+        "error": "frappe.exceptions.ValidationError: 请为第 1 行的物料<strong>002130</strong>输入仓库信息",
+        "erp_payload": {
+          "material_request_type": "Purchase",
+          "schedule_date": "2026-05-04",
+          "items": [
+            {
+              "item_code": "002130",
+              "qty": 10.0,
+              "uom": "斤",
+              "schedule_date": "2026-05-04"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

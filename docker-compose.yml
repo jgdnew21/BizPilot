@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: bizpilot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bizpilot
+      POSTGRES_USER: bizpilot
+      POSTGRES_PASSWORD: abc123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - bizpilot-net
+
+  nocodb:
+    image: nocodb/nocodb:latest
+    container_name: bizpilot-nocodb
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      NC_DB: "pg://postgres:5432?u=bizpilot&p=abc123&d=bizpilot"
+      NC_ALLOW_LOCAL_EXTERNAL_DBS: "true"
+    depends_on:
+      - postgres
+    networks:
+      - bizpilot-net
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: bizpilot-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5678/
+      GENERIC_TIMEZONE: Asia/Shanghai
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - postgres
+    networks:
+      - bizpilot-net
+
+volumes:
+  postgres_data:
+  n8n_data:
+
+networks:
+  bizpilot-net:
+    driver: bridge
