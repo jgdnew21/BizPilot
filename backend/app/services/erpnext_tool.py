@@ -38,25 +38,15 @@ class ERPNextClient:
         }
     
     def create_material_request(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """
-        payload example:
-        {
-        "material_request_type": "Purchase",
-        "schedule_date": "2026-04-24",
-        "items": [
-            {"item_code": "002130", "qty": 80, "uom": "斤"},
-            {"item_code": "002132", "qty": 10, "uom": "个"}
-        ]
-        }
-        """
-
-        items = []
+        warehouse = payload.get("warehouse") or DEFAULT_WAREHOUSE
+        items: list[dict[str, Any]] = []
 
         for item in payload["items"]:
             row = {
                 "item_code": item["item_code"],
                 "qty": item["qty"],
-                "schedule_date": payload["schedule_date"],
+                "schedule_date": item.get("schedule_date") or payload["schedule_date"],
+                "warehouse": item.get("warehouse") or warehouse,
             }
 
             if item.get("uom"):
@@ -65,7 +55,7 @@ class ERPNextClient:
             items.append(row)
 
         body = {
-            "material_request_type": "Purchase",
+            "material_request_type": payload.get("material_request_type", "Purchase"),
             "schedule_date": payload["schedule_date"],
             "items": items,
         }
@@ -90,7 +80,6 @@ class ERPNextClient:
             or data.get("_server_messages")
             or str(data)
         )
-
 
     def create_purchase_order(self, payload: dict[str, Any]) -> dict[str, Any]:
         """

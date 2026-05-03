@@ -506,6 +506,7 @@ def build_erpnext_payload(structured_payload: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "material_request_type": "Purchase",
         "schedule_date": structured_payload["schedule_date"],
+        "warehouse": structured_payload["warehouse"],
         "items": [
             {
                 "item_code": item["item_code"],
