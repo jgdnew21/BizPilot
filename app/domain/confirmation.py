@@ -1,0 +1,1 @@
+"""Confirmation domain abstractions placeholder."""
