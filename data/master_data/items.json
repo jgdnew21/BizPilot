@@ -1,0 +1,5 @@
+[
+  {"aliases": ["五常大米", "大米"], "item_code": "RICE001", "item_name": "五常大米", "purchase_uom": "斤"},
+  {"aliases": ["嘉木东来寿眉白茶", "寿眉白茶", "白茶"], "item_code": "TEA001", "item_name": "嘉木东来寿眉白茶", "purchase_uom": "盒"},
+  {"aliases": ["萌考拉冰淇淋", "冰淇淋"], "item_code": "ICE001", "item_name": "萌考拉冰淇淋", "purchase_uom": "个"}
+]
