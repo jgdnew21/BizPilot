@@ -54,6 +54,9 @@ class PurchaseSnapshot(BaseModel):
     session_id: str
     user_id: str
     status: Literal[
+        "ready_for_confirmation",
+        "needs_clarification",
+        "blocked",
         "pending_confirmation",
         "confirmed",
         "submitted",

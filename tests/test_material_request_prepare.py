@@ -93,10 +93,37 @@ def test_unmatched_supplier_markdown_does_not_ask_confirm():
 def test_vague_input_does_not_create_items():
     res = _wf().prepare('wechat_group_001', 'u_001', '店长张三', '帮我补点货')
     assert '| 1 |' not in res['markdown_text']
-    assert '⚠️ 未识别到商品明细，暂不能提交。' in res['markdown_text']
+    assert '采购需求计划（需补充）' in res['markdown_text']
 
 
 def test_missing_qty_does_not_create_confirmable_draft():
     res = _wf().prepare('wechat_group_001', 'u_001', '店长张三', '明天采无忧那边拿点大米')
     assert '| 1 |' not in res['markdown_text']
+    assert '请回复 **“确认”** 提交采购需求计划' not in res['markdown_text']
+
+
+def test_ready_for_confirmation_markdown_all_matched():
+    res = _wf().prepare('wechat_group_001', 'u_001', '店长张三', '明天要买五常大米80斤，供应商采无忧，入南宁仓')
+    assert res['status'] == 'ready_for_confirmation'
+    assert '采购需求计划（待确认）' in res['markdown_text']
+    assert '请回复 **“确认”** 提交采购需求计划' in res['markdown_text']
+
+
+def test_needs_clarification_when_no_items():
+    res = _wf().prepare('wechat_group_001', 'u_001', '店长张三', '帮我补点货')
+    assert res['status'] == 'needs_clarification'
+    assert '采购需求计划（需补充）' in res['markdown_text']
+    assert '请回复 **“确认”** 提交采购需求计划' not in res['markdown_text']
+
+
+def test_needs_clarification_when_missing_qty():
+    res = _wf().prepare('wechat_group_001', 'u_001', '店长张三', '明天采无忧那边拿大米')
+    assert res['status'] == 'needs_clarification'
+    assert '商品 + 数量 + 单位' in res['markdown_text']
+
+
+def test_blocked_when_supplier_unmatched():
+    res = _wf().prepare('wechat_group_001', 'u_001', '店长张三', '明天要买五常大米80斤，供应商不存在供应商，入南宁仓')
+    assert res['status'] == 'blocked'
+    assert '采购需求计划（暂不能提交）' in res['markdown_text']
     assert '请回复 **“确认”** 提交采购需求计划' not in res['markdown_text']

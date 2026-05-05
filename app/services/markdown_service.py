@@ -5,12 +5,20 @@ from app.domain.validation import ValidationResult
 class MarkdownService:
     @staticmethod
     def build_material_request_markdown(draft: MaterialRequestDraft, validation_result: ValidationResult, warehouse_defaulted: bool = False) -> str:
+        title_map = {
+            "ready_for_confirmation": "## 采购需求计划（待确认）",
+            "needs_clarification": "## 采购需求计划（需补充）",
+            "blocked": "## 采购需求计划（暂不能提交）",
+        }
         lines = [
-            "## 采购需求计划（待确认）",
+            title_map[validation_result.status],
             "",
-            "| # | 商品 | 数量 | 单位 | ERP匹配商品 | 状态 |",
-            "|---|---|---:|---|---|---|",
         ]
+        if draft.items:
+            lines += [
+                "| # | 商品 | 数量 | 单位 | ERP匹配商品 | 状态 |",
+                "|---|---|---:|---|---|---|",
+            ]
         for idx, row in enumerate(draft.items, start=1):
             status = "已匹配" if row["matched_item"]["status"] == "matched" else "未匹配"
             erp_name = row["matched_item"].get("item_name") or "-"
@@ -27,13 +35,18 @@ class MarkdownService:
             f"- **录入人**：{draft.user_name}",
             "",
         ]
-        if "items" in validation_result.missing_fields:
-            lines.append("⚠️ 未识别到商品明细，暂不能提交。")
-            lines.append("请按“商品 + 数量 + 单位”的格式补充，例如：五常大米 80 斤。")
+        if validation_result.status == "needs_clarification":
+            lines.append("我识别到你想创建采购需求计划，但还缺少必要信息：")
+            lines.append("")
+            lines.append("- **商品明细**：未识别到完整的“商品 + 数量 + 单位”")
+            lines.append("")
+            lines.append("请补充商品、数量和单位，例如：")
+            lines.append("")
+            lines.append("五常大米 80 斤")
             lines.append("")
             return "\n".join(lines)
 
-        if validation_result.status != "ready_for_confirmation":
+        if validation_result.status == "blocked":
             lines.append("⚠️ 存在未匹配项，暂不能提交。")
             lines.append("请根据上方提示修正商品、供应商、仓库或单位后，重新生成确认单。")
             lines.append("")
