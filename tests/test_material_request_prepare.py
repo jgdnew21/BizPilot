@@ -63,9 +63,24 @@ def test_parse_supplier_with_colon():
     assert '- **供应商**：采无忧 → 采无忧供货有限公司' in res['markdown_text']
 
 
+def test_parse_supplier_from_pattern():
+    res = _wf().prepare('wechat_group_001', 'u_001', '店长张三', '明天从采无忧采购五常大米80斤')
+    assert '- **供应商**：采无忧 → 采无忧供货有限公司' in res['markdown_text']
+
+
 def test_parse_supplier_with_warehouse_after():
     res = _wf().prepare('wechat_group_001', 'u_001', '店长张三', '明天买五常大米80斤，供应商是 采无忧，入南宁仓')
     assert '- **供应商**：采无忧 → 采无忧供货有限公司' in res['markdown_text']
+    assert '- **预计入库仓库**：南宁仓 → 南宁仓 - 艾达D' in res['markdown_text']
+
+
+def test_parse_warehouse_ru():
+    res = _wf().prepare('wechat_group_001', 'u_001', '店长张三', '明天买五常大米80斤，供应商采无忧，入南宁仓')
+    assert '- **预计入库仓库**：南宁仓 → 南宁仓 - 艾达D' in res['markdown_text']
+
+
+def test_parse_warehouse_ru_ku_dao():
+    res = _wf().prepare('wechat_group_001', 'u_001', '店长张三', '明天买五常大米80斤，供应商采无忧，入库到南宁仓')
     assert '- **预计入库仓库**：南宁仓 → 南宁仓 - 艾达D' in res['markdown_text']
 
 
@@ -73,3 +88,15 @@ def test_unmatched_supplier_markdown_does_not_ask_confirm():
     res = _wf().prepare('wechat_group_001', 'u_001', '店长张三', '明天买五常大米80斤，供应商是不存在供应商')
     assert '请回复 **“确认”** 提交采购需求计划' not in res['markdown_text']
     assert '⚠️ 存在未匹配项，暂不能提交。' in res['markdown_text']
+
+
+def test_vague_input_does_not_create_items():
+    res = _wf().prepare('wechat_group_001', 'u_001', '店长张三', '帮我补点货')
+    assert '| 1 |' not in res['markdown_text']
+    assert '⚠️ 未识别到商品明细，暂不能提交。' in res['markdown_text']
+
+
+def test_missing_qty_does_not_create_confirmable_draft():
+    res = _wf().prepare('wechat_group_001', 'u_001', '店长张三', '明天采无忧那边拿点大米')
+    assert '| 1 |' not in res['markdown_text']
+    assert '请回复 **“确认”** 提交采购需求计划' not in res['markdown_text']

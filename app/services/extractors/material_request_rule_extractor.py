@@ -11,9 +11,14 @@ class RuleBasedMaterialRequestExtractor:
     def _strip_non_item_segments(text: str) -> str:
         cleaned = text
         patterns = [
-            r"供应商是?[\u4e00-\u9fa5A-Za-z0-9（）()·\-]+",
-            r"入[\u4e00-\u9fa5A-Za-z0-9（）()·\-]*仓",
-            r"入库到[\u4e00-\u9fa5A-Za-z0-9（）()·\-]*仓?",
+            r"(?:供应商|供货商|供应单位|供货单位)\s*(?:是|为|叫|:|：|=)?\s*[\u4e00-\u9fa5A-Za-z0-9（）()·\-.]+",
+            r"(?:从|找)\s*[\u4e00-\u9fa5A-Za-z0-9（）()·\-.]+\s*采购",
+            r"(?:预计)?\s*入库仓库\s*[\u4e00-\u9fa5A-Za-z0-9（）()·\-.]+",
+            r"入库到\s*[\u4e00-\u9fa5A-Za-z0-9（）()·\-.]+仓?",
+            r"入库\s*[\u4e00-\u9fa5A-Za-z0-9（）()·\-.]+仓?",
+            r"入\s*[\u4e00-\u9fa5A-Za-z0-9（）()·\-.]+仓?",
+            r"仓库\s*(?:是|为|:|：|=)?\s*[\u4e00-\u9fa5A-Za-z0-9（）()·\-.]+",
+            r"放\s*[\u4e00-\u9fa5A-Za-z0-9（）()·\-.]+仓?",
         ]
         for pattern in patterns:
             cleaned = re.sub(pattern, " ", cleaned)
@@ -39,13 +44,33 @@ class RuleBasedMaterialRequestExtractor:
             return supplier
         return None
 
+    @staticmethod
+    def _parse_warehouse_input(text: str) -> str | None:
+        patterns = [
+            re.compile(r"(?:预计)?\s*入库仓库\s*(?P<warehouse>[\u4e00-\u9fa5A-Za-z0-9（）()·\-.]+)"),
+            re.compile(r"入库到\s*(?P<warehouse>[\u4e00-\u9fa5A-Za-z0-9（）()·\-.]+仓?)"),
+            re.compile(r"入库\s*(?P<warehouse>[\u4e00-\u9fa5A-Za-z0-9（）()·\-.]+仓?)"),
+            re.compile(r"入\s*(?P<warehouse>[\u4e00-\u9fa5A-Za-z0-9（）()·\-.]+仓?)"),
+            re.compile(r"仓库\s*(?:是|为|:|：|=)?\s*(?P<warehouse>[\u4e00-\u9fa5A-Za-z0-9（）()·\-.]+仓?)"),
+            re.compile(r"放\s*(?P<warehouse>[\u4e00-\u9fa5A-Za-z0-9（）()·\-.]+仓?)"),
+        ]
+        for pattern in patterns:
+            match = pattern.search(text)
+            if not match:
+                continue
+            warehouse = (match.group("warehouse") or "").strip()
+            warehouse = re.sub(r"^(?:是|为|叫|:|：|=|\s)+", "", warehouse).strip()
+            warehouse = re.split(r"(?:，|,|。|；|;|\n)", warehouse, maxsplit=1)[0].strip()
+            if warehouse:
+                return warehouse
+        return None
+
     def extract(self, normalized: NormalizedText) -> ExtractionResult:
         text = normalized.normalized_text
         schedule_input = next((k for k in ("今天", "明天", "后天") if k in text), None)
         supplier_input = self._parse_supplier_input(text)
 
-        warehouse = re.search(r"入([\u4e00-\u9fa5A-Za-z0-9]+仓?)", text)
-        warehouse_input = warehouse.group(1) if warehouse else None
+        warehouse_input = self._parse_warehouse_input(text)
 
         item_text = self._strip_non_item_segments(text)
         item_text = item_text.replace("要买", " ").replace("购买", " ").replace("采购", " ")
