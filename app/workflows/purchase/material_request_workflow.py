@@ -27,6 +27,26 @@ class MaterialRequestWorkflow:
             cleaned = re.sub(pattern, " ", cleaned)
         return cleaned
 
+    @staticmethod
+    def parse_supplier_input(text: str) -> str | None:
+        keyword_pattern = re.compile(
+            r"(?:供应商|供货商|供应单位|供货单位)\s*(?:是|为|叫|:|：|=)?\s*(?P<supplier>[^，,。；;\n]+)"
+        )
+        from_or_zhao_pattern = re.compile(r"(?:从|找)(?P<supplier>[\u4e00-\u9fa5A-Za-z0-9（）()·\-]+)采购")
+
+        for pattern in (keyword_pattern, from_or_zhao_pattern):
+            match = pattern.search(text)
+            if not match:
+                continue
+
+            supplier = (match.group("supplier") or "").strip()
+            supplier = re.sub(r"^(?:是|为|叫|:|：|=|\s)+", "", supplier).strip()
+            supplier = re.split(r"(?:，|,|。|；|;|\n|入库|入|仓库|预计入库仓库)", supplier, maxsplit=1)[0].strip()
+            if supplier in {"", "是", "为", "叫"}:
+                return None
+            return supplier
+        return None
+
     def parse_purchase_items(self, text: str):
         normalized = self._strip_non_item_segments(text)
         normalized = normalized.replace('要买', ' ').replace('购买', ' ').replace('采购', ' ')
@@ -52,8 +72,7 @@ class MaterialRequestWorkflow:
         delta = schedule_map.get(schedule_input, 0)
         schedule_date = (date.today() + timedelta(days=delta)).isoformat()
 
-        supplier = re.search(r"供应商([\u4e00-\u9fa5A-Za-z0-9]+)", text)
-        supplier_input = supplier.group(1) if supplier else None
+        supplier_input = self.parse_supplier_input(text)
         warehouse = re.search(r"入([\u4e00-\u9fa5A-Za-z0-9]+仓?)", text)
         warehouse_input = warehouse.group(1) if warehouse else settings.default_warehouse_alias
         warehouse_defaulted = warehouse is None
@@ -97,7 +116,7 @@ class MaterialRequestWorkflow:
 
         payload = snap.structured_payload
         if payload["supplier"]["status"] != "matched":
-            return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "供应商未匹配", "error_code": "UNMATCHED_SUPPLIER"}
+            return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "供应商未匹配，不能提交采购需求计划。请先确认供应商名称。", "error_code": "UNMATCHED_SUPPLIER"}
         if payload["warehouse"]["status"] != "matched":
             return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "仓库未匹配", "error_code": "UNMATCHED_WAREHOUSE"}
         if not payload.get("items"):
