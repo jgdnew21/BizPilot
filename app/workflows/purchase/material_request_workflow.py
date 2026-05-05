@@ -7,7 +7,7 @@ from app.services.markdown_service import MarkdownService
 from app.services.master_data_service import MasterDataService
 from app.services.snapshot_service import SnapshotService
 from app.services.text_normalizer import TextNormalizer
-from app.services.extractors import RuleBasedMaterialRequestExtractor
+from app.services.extractors import MaterialRequestExtractorOrchestrator
 from app.integrations.erpnext_client import ErpnextClient
 
 
@@ -17,7 +17,7 @@ class MaterialRequestWorkflow:
         self.snapshot_service = snapshot_service
         self.erpnext_client = erpnext_client
         self.text_normalizer = TextNormalizer()
-        self.extractor = RuleBasedMaterialRequestExtractor()
+        self.extractor = MaterialRequestExtractorOrchestrator()
 
     def _parse(self, text: str):
         normalized = self.text_normalizer.normalize(text)

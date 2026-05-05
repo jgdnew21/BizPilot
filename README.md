@@ -131,3 +131,19 @@ curl -X POST http://localhost:8000/api/purchase/material-requests/confirm \
   "erpnext_doc_no": "MAT-MR-..."
 }
 ```
+
+
+## Future LLM Extractor
+
+未来 LLM 仅用于自然语言字段抽取，不直接写 ERPNext。
+
+BizPilot 安全链路保持为：
+
+用户原话
+→ Extractor 抽取候选结构
+→ 主数据匹配
+→ 业务校验
+→ Markdown 确认
+→ Snapshot
+→ 用户确认
+→ ERPNext MR
