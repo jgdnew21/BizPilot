@@ -1,11 +1,13 @@
-import re
 from datetime import date, timedelta, datetime
 
 from app.config import settings
+from app.domain.validation import BusinessValidator
 from app.domain.purchase.material_request import MaterialRequestDraft, PurchaseSnapshot
 from app.services.markdown_service import MarkdownService
 from app.services.master_data_service import MasterDataService
 from app.services.snapshot_service import SnapshotService
+from app.services.text_normalizer import TextNormalizer
+from app.services.extractors import RuleBasedMaterialRequestExtractor
 from app.integrations.erpnext_client import ErpnextClient
 
 
@@ -14,71 +16,31 @@ class MaterialRequestWorkflow:
         self.master_data_service = master_data_service
         self.snapshot_service = snapshot_service
         self.erpnext_client = erpnext_client
-
-    @staticmethod
-    def _strip_non_item_segments(text: str) -> str:
-        cleaned = text
-        patterns = [
-            r"供应商是?[\u4e00-\u9fa5A-Za-z0-9（）()·\-]+",
-            r"入[\u4e00-\u9fa5A-Za-z0-9（）()·\-]*仓",
-            r"入库到[\u4e00-\u9fa5A-Za-z0-9（）()·\-]*仓?",
-        ]
-        for pattern in patterns:
-            cleaned = re.sub(pattern, " ", cleaned)
-        return cleaned
-
-    @staticmethod
-    def parse_supplier_input(text: str) -> str | None:
-        keyword_pattern = re.compile(
-            r"(?:供应商|供货商|供应单位|供货单位)\s*(?:是|为|叫|:|：|=)?\s*(?P<supplier>[^，,。；;\n]+)"
-        )
-        from_or_zhao_pattern = re.compile(r"(?:从|找)(?P<supplier>[\u4e00-\u9fa5A-Za-z0-9（）()·\-]+)采购")
-
-        for pattern in (keyword_pattern, from_or_zhao_pattern):
-            match = pattern.search(text)
-            if not match:
-                continue
-
-            supplier = (match.group("supplier") or "").strip()
-            supplier = re.sub(r"^(?:是|为|叫|:|：|=|\s)+", "", supplier).strip()
-            supplier = re.split(r"(?:，|,|。|；|;|\n|入库|入|仓库|预计入库仓库)", supplier, maxsplit=1)[0].strip()
-            if supplier in {"", "是", "为", "叫"}:
-                return None
-            return supplier
-        return None
-
-    def parse_purchase_items(self, text: str):
-        normalized = self._strip_non_item_segments(text)
-        normalized = normalized.replace('要买', ' ').replace('购买', ' ').replace('采购', ' ')
-
-        item_pattern = re.compile(
-            r"(?P<name>[\u4e00-\u9fa5A-Za-z0-9（）()·\-]+?)\s*(?P<qty>\d+(?:\.\d+)?)\s*(?P<uom>斤|盒|个|箱|包|袋|瓶|件|kg|KG|千克)"
-        )
-
-        items = []
-        for match in item_pattern.finditer(normalized):
-            name = match.group("name").strip('，,。;；:： ') 
-            if not name:
-                continue
-            qty = float(match.group("qty"))
-            uom = match.group("uom")
-            matched = self.master_data_service.match_item(name)
-            items.append({"item_input_name": name, "qty": qty, "uom": uom, "matched_item": matched.model_dump()})
-        return items
+        self.text_normalizer = TextNormalizer()
+        self.extractor = RuleBasedMaterialRequestExtractor()
 
     def _parse(self, text: str):
+        normalized = self.text_normalizer.normalize(text)
+        extraction = self.extractor.extract(normalized)
+
         schedule_map = {"今天": 0, "明天": 1, "后天": 2}
-        schedule_input = next((k for k in schedule_map if k in text), "未明确，默认今天")
-        delta = schedule_map.get(schedule_input, 0)
+        schedule_input = extraction.schedule_date_input or "未明确，默认今天"
+        delta = schedule_map.get(extraction.schedule_date_input or "", 0)
         schedule_date = (date.today() + timedelta(days=delta)).isoformat()
 
-        supplier_input = self.parse_supplier_input(text)
-        warehouse = re.search(r"入([\u4e00-\u9fa5A-Za-z0-9]+仓?)", text)
-        warehouse_input = warehouse.group(1) if warehouse else settings.default_warehouse_alias
-        warehouse_defaulted = warehouse is None
+        warehouse_input = extraction.warehouse_input or settings.default_warehouse_alias
+        warehouse_defaulted = extraction.warehouse_input is None
 
-        items = self.parse_purchase_items(text)
-        return schedule_input, schedule_date, supplier_input, warehouse_input, warehouse_defaulted, items
+        items = []
+        for row in extraction.items:
+            matched = self.master_data_service.match_item(row.item_input_name)
+            items.append({
+                "item_input_name": row.item_input_name,
+                "qty": row.qty,
+                "uom": row.uom,
+                "matched_item": matched.model_dump(),
+            })
+        return schedule_input, schedule_date, extraction.supplier_input, warehouse_input, warehouse_defaulted, items
 
     def prepare(self, session_id: str, user_id: str, user_name: str, text: str):
         schedule_input, schedule_date, supplier_input, warehouse_input, defaulted, items = self._parse(text)
@@ -93,7 +55,8 @@ class MaterialRequestWorkflow:
             "doc_type": "material_request", "schedule_date": schedule_date,
             "supplier": supplier.model_dump(), "warehouse": warehouse.model_dump(), "items": items,
         }
-        draft.markdown_text = MarkdownService.build_material_request_markdown(draft, warehouse_defaulted=defaulted)
+        validation_result = BusinessValidator.validate_material_request_payload(draft.structured_payload)
+        draft.markdown_text = MarkdownService.build_material_request_markdown(draft, validation_result, warehouse_defaulted=defaulted)
 
         snap = PurchaseSnapshot(
             snapshot_id=self.snapshot_service.generate_snapshot_id(), doc_type="material_request",
@@ -115,12 +78,18 @@ class MaterialRequestWorkflow:
             return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "confirm_text必须为确认", "error_code": "INVALID_CONFIRM_TEXT"}
 
         payload = snap.structured_payload
-        if payload["supplier"]["status"] != "matched":
-            return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "供应商未匹配，不能提交采购需求计划。请先确认供应商名称。", "error_code": "UNMATCHED_SUPPLIER"}
-        if payload["warehouse"]["status"] != "matched":
-            return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "仓库未匹配", "error_code": "UNMATCHED_WAREHOUSE"}
-        if not payload.get("items"):
-            return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "未识别到商品明细", "error_code": "EMPTY_ITEMS"}
+        validation_result = BusinessValidator.validate_material_request_payload(payload)
+        if not validation_result.can_confirm:
+            if "supplier_unmatched" in validation_result.blocking_reasons:
+                return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "供应商未匹配，不能提交采购需求计划。请先确认供应商名称。", "error_code": "UNMATCHED_SUPPLIER"}
+            if "warehouse_unmatched" in validation_result.blocking_reasons:
+                return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "仓库未匹配", "error_code": "UNMATCHED_WAREHOUSE"}
+            if "items" in validation_result.missing_fields:
+                return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "未识别到商品明细", "error_code": "EMPTY_ITEMS"}
+            if "item_unmatched" in validation_result.blocking_reasons:
+                return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "商品未匹配", "error_code": "UNMATCHED_ITEM"}
+            if "uom_mismatch" in validation_result.blocking_reasons:
+                return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "单位与采购单位不一致", "error_code": "UOM_MISMATCH"}
 
         erp_items = []
         for row in payload["items"]:
