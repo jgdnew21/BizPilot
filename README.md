@@ -148,3 +148,8 @@ BizPilot 安全链路：
 → Snapshot
 → 用户确认
 → ERPNext MR
+
+提取策略（v0.2）：
+- `ENABLE_LLM_EXTRACTOR=true`：优先使用 LLM 抽取；若 LLM 失败/超时/返回非法结构，将自动回退到规则抽取。
+- `ENABLE_LLM_EXTRACTOR=false`：只使用规则抽取。
+- 无论 LLM 还是规则抽取，prepare API 始终返回 Markdown 确认单；抽取器元信息会记录到 snapshot（如 `extractor_name`、`extractor_warnings`、`confidence`）。

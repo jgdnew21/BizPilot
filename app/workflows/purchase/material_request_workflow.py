@@ -40,10 +40,10 @@ class MaterialRequestWorkflow:
                 "uom": row.uom,
                 "matched_item": matched.model_dump(),
             })
-        return schedule_input, schedule_date, extraction.supplier_input, warehouse_input, warehouse_defaulted, items
+        return schedule_input, schedule_date, extraction.supplier_input, warehouse_input, warehouse_defaulted, items, extraction
 
     def prepare(self, session_id: str, user_id: str, user_name: str, text: str):
-        schedule_input, schedule_date, supplier_input, warehouse_input, defaulted, items = self._parse(text)
+        schedule_input, schedule_date, supplier_input, warehouse_input, defaulted, items, extraction = self._parse(text)
         supplier = self.master_data_service.match_supplier(supplier_input)
         warehouse = self.master_data_service.match_warehouse(warehouse_input)
         draft = MaterialRequestDraft(
@@ -54,6 +54,9 @@ class MaterialRequestWorkflow:
         draft.structured_payload = {
             "doc_type": "material_request", "schedule_date": schedule_date,
             "supplier": supplier.model_dump(), "warehouse": warehouse.model_dump(), "items": items,
+            "extractor_name": extraction.extractor_name,
+            "extractor_warnings": extraction.warnings,
+            "confidence": extraction.confidence,
         }
         validation_result = BusinessValidator.validate_material_request_payload(draft.structured_payload)
         draft.structured_payload.update({

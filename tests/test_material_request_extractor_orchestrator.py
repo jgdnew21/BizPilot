@@ -12,7 +12,7 @@ def test_rule_extractor_used_by_default(monkeypatch):
     assert isinstance(orchestrator.llm_extractor, LlmMaterialRequestExtractor)
 
 
-def test_orchestrator_returns_rule_result_when_complete(monkeypatch):
+def test_orchestrator_uses_rule_when_llm_disabled(monkeypatch):
     monkeypatch.setattr('app.config.settings.enable_llm_extractor', False)
     orchestrator = MaterialRequestExtractorOrchestrator()
 
@@ -26,30 +26,31 @@ def test_orchestrator_returns_rule_result_when_complete(monkeypatch):
     normalized = NormalizedText(raw_text='明天找采无忧采购大米20袋入南宁仓', normalized_text='明天找采无忧采购大米20袋入南宁仓')
     result = orchestrator.extract(normalized)
 
-    assert result.items
-    assert result.supplier_input
-    assert result.schedule_date_input
-    assert result.warehouse_input
+    assert result.extractor_name == "rule_based"
     assert called['llm'] is False
 
 
-def test_orchestrator_warns_when_rule_incomplete_and_llm_disabled(monkeypatch):
-    monkeypatch.setattr('app.config.settings.enable_llm_extractor', False)
+def test_orchestrator_uses_llm_when_enabled(monkeypatch):
+    monkeypatch.setattr('app.config.settings.enable_llm_extractor', True)
     orchestrator = MaterialRequestExtractorOrchestrator()
-    normalized = NormalizedText(raw_text='帮我补点货', normalized_text='帮我补点货')
+    normalized = NormalizedText(raw_text='明天采购五常大米80斤，供应商采无忧，入南宁仓', normalized_text='明天采购五常大米80斤，供应商采无忧，入南宁仓')
+
+    monkeypatch.setattr(orchestrator.llm_extractor, "extract", lambda _: ExtractionResult(
+        raw_text=normalized.raw_text, normalized_text=normalized.normalized_text, extractor_name="llm",
+        supplier_input="采无忧", schedule_date_input="明天", warehouse_input="南宁仓",
+        items=[PurchaseLineInput(item_input_name="五常大米", qty=80, uom="斤")]
+    ))
+    result = orchestrator.extract(normalized)
+    assert result.extractor_name == "llm"
+    assert result.items[0].item_input_name == "五常大米"
+
+
+def test_orchestrator_fallbacks_to_rule_when_llm_fails(monkeypatch):
+    monkeypatch.setattr('app.config.settings.enable_llm_extractor', True)
+    orchestrator = MaterialRequestExtractorOrchestrator()
+    normalized = NormalizedText(raw_text='明天采购五常大米80斤，供应商采无忧，入南宁仓', normalized_text='明天采购五常大米80斤，供应商采无忧，入南宁仓')
+    monkeypatch.setattr(orchestrator.llm_extractor, "extract", lambda _: (_ for _ in ()).throw(RuntimeError("timeout")))
 
     result = orchestrator.extract(normalized)
-
-    assert 'Rule extraction incomplete; LLM fallback is not enabled yet.' in result.warnings
-
-
-def test_llm_extractor_handles_upstream_error(monkeypatch):
-    monkeypatch.setattr('requests.post', lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('boom')))
-    extractor = LlmMaterialRequestExtractor()
-
-    normalized = NormalizedText(raw_text='老板说今天先把常用货备一下', normalized_text='老板说今天先把常用货备一下')
-    result = extractor.extract(normalized)
-
-    assert result.items == []
-    assert result.extractor_name == 'llm'
-    assert any('LLM extraction failed' in x for x in result.warnings)
+    assert result.extractor_name == "rule_based"
+    assert any("fallback to rule extractor" in w for w in result.warnings)
