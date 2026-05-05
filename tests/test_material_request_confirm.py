@@ -156,3 +156,33 @@ def test_confirm_success_updates_snapshot_submitted(monkeypatch):
     snap = wf.snapshot_service.get(sid)
     assert snap.status == 'submitted'
     assert snap.erpnext_doc_no == 'MAT-MR-2026-00009'
+
+
+def test_erpnext_error_includes_response_body_summary(monkeypatch):
+    from app.integrations.erpnext_client import ErpnextApiError
+
+    def _raise(self, payload):
+        raise ErpnextApiError(417, "http://erp.local/api/resource/Material Request", "{\"exc_type\":\"ValidationError\",\"message\":\"bad request\"}")
+
+    monkeypatch.setattr(ErpnextClient, 'create_material_request', _raise)
+    wf = _wf()
+    sid = wf.prepare('wechat_group_001', 'u_001', '店长张三', '明天要买五常大米80斤，供应商采无忧，入南宁仓')['snapshot_id']
+    res = wf.confirm('wechat_group_001', 'u_001', sid, '确认')
+    assert res['status'] == 'submit_failed'
+    assert 'ValidationError' in res['message']
+    snap = wf.snapshot_service.get(sid)
+    assert snap.status == 'submit_failed'
+    assert 'ValidationError' in (snap.error_message or '')
+
+
+def test_confirm_failure_message_says_material_request_not_purchase_order(monkeypatch):
+    from app.integrations.erpnext_client import ErpnextApiError
+
+    monkeypatch.setattr(ErpnextClient, 'create_material_request', lambda self, payload: (_ for _ in ()).throw(
+        ErpnextApiError(417, 'http://erp.local/api/resource/Material Request', 'error body')
+    ))
+    wf = _wf()
+    sid = wf.prepare('wechat_group_001', 'u_001', '店长张三', '明天要买五常大米80斤，供应商采无忧，入南宁仓')['snapshot_id']
+    res = wf.confirm('wechat_group_001', 'u_001', sid, '确认')
+    assert '采购需求计划' in res['message']
+    assert '采购订单' not in res['message']
