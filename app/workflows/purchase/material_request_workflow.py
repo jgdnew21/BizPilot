@@ -10,7 +10,7 @@ from app.services.text_normalizer import TextNormalizer
 from app.services.extractors import MaterialRequestExtractorOrchestrator
 from app.services.material_request_payload_builder import build_material_request_erpnext_payload
 from app.services.date_parser import DateParser
-from app.integrations.erpnext_client import ErpnextClient
+from app.integrations.erpnext_client import ErpnextApiError, ErpnextClient
 
 
 class MaterialRequestWorkflow:
@@ -159,8 +159,20 @@ class MaterialRequestWorkflow:
             snap.erpnext_doc_no = name
             self.snapshot_service.update(snap)
             return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "submitted", "erpnext_doc_no": name, "message": f"已创建 ERPNext 采购需求计划 MR：{name}", "error_code": None}
+        except ErpnextApiError as exc:
+            snap.status = "submit_failed"
+            snap.error_message = exc.response_text_summary
+            self.snapshot_service.update(snap)
+            return {
+                "snapshot_id": snapshot_id,
+                "doc_type": snap.doc_type,
+                "status": "submit_failed",
+                "erpnext_doc_no": None,
+                "message": f"提交 ERPNext 采购需求计划失败：{exc.response_text_summary}",
+                "error_code": "ERPNEXT_API_ERROR",
+            }
         except Exception as exc:
             snap.status = "submit_failed"
-            snap.error_message = f"提交 ERPNext 失败：{str(exc)}"
+            snap.error_message = f"提交 ERPNext 采购需求计划失败：{str(exc)}"
             self.snapshot_service.update(snap)
             return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "submit_failed", "erpnext_doc_no": None, "message": snap.error_message, "error_code": "ERPNEXT_API_ERROR"}
