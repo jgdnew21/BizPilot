@@ -57,6 +57,7 @@ class PurchaseSnapshot(BaseModel):
         "ready_for_confirmation",
         "needs_clarification",
         "blocked",
+        "superseded",
         "pending_confirmation",
         "confirmed",
         "submitted",
@@ -66,6 +67,8 @@ class PurchaseSnapshot(BaseModel):
     raw_text: str
     markdown_text: str
     structured_payload: dict[str, Any]
+    previous_snapshot_id: str | None = None
+    revision: int = 1
     erpnext_doc_no: str | None = None
     error_message: str | None = None
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())

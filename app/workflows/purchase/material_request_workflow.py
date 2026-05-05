@@ -42,8 +42,24 @@ class MaterialRequestWorkflow:
             })
         return schedule_input, schedule_date, extraction.supplier_input, warehouse_input, warehouse_defaulted, items, extraction
 
-    def prepare(self, session_id: str, user_id: str, user_name: str, text: str):
-        schedule_input, schedule_date, supplier_input, warehouse_input, defaulted, items, extraction = self._parse(text)
+    def prepare(self, session_id: str, user_id: str, user_name: str, text: str, previous_snapshot_id: str | None = None):
+        previous_snapshot = None
+        revision = 1
+        input_text = text
+        if previous_snapshot_id:
+            previous_snapshot = self.snapshot_service.get(previous_snapshot_id)
+            if not previous_snapshot:
+                raise ValueError("previous_snapshot_id不存在")
+            if previous_snapshot.session_id != session_id or previous_snapshot.user_id != user_id:
+                raise ValueError("previous snapshot与当前会话或用户不匹配")
+            revision = previous_snapshot.revision + 1
+            input_text = (
+                f"previous_draft:\n{previous_snapshot.structured_payload}\n\n"
+                f"previous_markdown:\n{previous_snapshot.markdown_text}\n\n"
+                f"user_update:\n{text}"
+            )
+
+        schedule_input, schedule_date, supplier_input, warehouse_input, defaulted, items, extraction = self._parse(input_text)
         supplier = self.master_data_service.match_supplier(supplier_input)
         warehouse = self.master_data_service.match_warehouse(warehouse_input)
         draft = MaterialRequestDraft(
@@ -66,12 +82,18 @@ class MaterialRequestWorkflow:
             "blocking_reasons": validation_result.blocking_reasons,
         })
         draft.markdown_text = MarkdownService.build_material_request_markdown(draft, validation_result, warehouse_defaulted=defaulted)
+        if previous_snapshot:
+            draft.markdown_text += "\n\n这是基于上一版确认单重新整理的版本。"
 
         snap = PurchaseSnapshot(
             snapshot_id=self.snapshot_service.generate_snapshot_id(), doc_type="material_request",
             session_id=session_id, user_id=user_id, status=validation_result.status, raw_text=text,
             markdown_text=draft.markdown_text, structured_payload=draft.structured_payload,
+            previous_snapshot_id=previous_snapshot_id, revision=revision,
         )
+        if previous_snapshot and previous_snapshot.status in {"ready_for_confirmation", "pending_confirmation"}:
+            previous_snapshot.status = "superseded"
+            self.snapshot_service.update(previous_snapshot)
         self.snapshot_service.save(snap)
         return {"snapshot_id": snap.snapshot_id, "doc_type": snap.doc_type, "status": snap.status, "markdown_text": snap.markdown_text}
 
@@ -81,6 +103,8 @@ class MaterialRequestWorkflow:
             return {"snapshot_id": snapshot_id, "doc_type": "material_request", "status": "invalid", "erpnext_doc_no": None, "message": "snapshot不存在", "error_code": "SNAPSHOT_NOT_FOUND"}
         if snap.session_id != session_id or snap.user_id != user_id:
             return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "会话或用户不匹配", "error_code": "IDENTITY_MISMATCH"}
+        if snap.status == "superseded":
+            return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "该确认单已有更新版本，请确认最新确认单。", "error_code": "SNAPSHOT_SUPERSEDED"}
         if snap.status not in {"ready_for_confirmation", "needs_clarification", "blocked"}:
             return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "snapshot状态不可确认", "error_code": "INVALID_STATUS"}
         if confirm_text.strip() != "确认":

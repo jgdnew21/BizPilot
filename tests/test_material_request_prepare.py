@@ -127,3 +127,55 @@ def test_blocked_when_supplier_unmatched():
     assert res['status'] == 'blocked'
     assert '采购需求计划（暂不能提交）' in res['markdown_text']
     assert '请回复 **“确认”** 提交采购需求计划' not in res['markdown_text']
+
+
+def test_prepare_supports_previous_snapshot_id(monkeypatch):
+    wf = _wf()
+    first = wf.prepare('wechat_group_001', 'u_001', '店长张三', '明天采购五常大米80斤，供应商采无忧，入南宁仓')
+    original_parse = wf._parse
+    monkeypatch.setattr(wf, '_parse', lambda _: original_parse('明天采购五常大米100斤，供应商采无忧，入南宁仓'))
+    second = wf.prepare('wechat_group_001', 'u_001', '店长张三', '数量改成100斤', previous_snapshot_id=first['snapshot_id'])
+    snap = wf.snapshot_service.get(second['snapshot_id'])
+    assert second['snapshot_id'] != first['snapshot_id']
+    assert snap is not None
+    assert snap.previous_snapshot_id == first['snapshot_id']
+    assert snap.revision == 2
+    assert '100.0' in second['markdown_text']
+
+
+def test_update_warehouse_from_previous_snapshot(monkeypatch):
+    wf = _wf()
+    first = wf.prepare('wechat_group_001', 'u_001', '店长张三', '明天采购五常大米80斤，供应商采无忧，入南宁仓')
+    original_parse = wf._parse
+    monkeypatch.setattr(wf, '_parse', lambda _: original_parse('明天采购五常大米80斤，供应商采无忧，入广州仓'))
+    second = wf.prepare('wechat_group_001', 'u_001', '店长张三', '仓库改成广州仓', previous_snapshot_id=first['snapshot_id'])
+    assert '广州仓' in second['markdown_text']
+
+
+def test_add_item_from_previous_snapshot(monkeypatch):
+    wf = _wf()
+    first = wf.prepare('wechat_group_001', 'u_001', '店长张三', '明天采购五常大米80斤，供应商采无忧，入南宁仓')
+    original_parse = wf._parse
+    monkeypatch.setattr(wf, '_parse', lambda _: original_parse('明天采购五常大米80斤，嘉木东来寿眉白茶10盒，供应商采无忧，入南宁仓'))
+    second = wf.prepare('wechat_group_001', 'u_001', '店长张三', '再加10盒白茶', previous_snapshot_id=first['snapshot_id'])
+    assert '| 2 | 嘉木东来寿眉白茶 | 10.0 | 盒 | 嘉木东来寿眉白茶 | 已匹配 |' in second['markdown_text']
+
+
+def test_previous_snapshot_user_mismatch_rejected():
+    wf = _wf()
+    first = wf.prepare('wechat_group_001', 'u_001', '店长张三', '明天采购五常大米80斤，供应商采无忧，入南宁仓')
+    try:
+        wf.prepare('wechat_group_001', 'u_002', '店长李四', '数量改成100斤', previous_snapshot_id=first['snapshot_id'])
+        assert False
+    except ValueError as exc:
+        assert '不匹配' in str(exc)
+
+
+def test_previous_snapshot_session_mismatch_rejected():
+    wf = _wf()
+    first = wf.prepare('wechat_group_001', 'u_001', '店长张三', '明天采购五常大米80斤，供应商采无忧，入南宁仓')
+    try:
+        wf.prepare('wechat_group_002', 'u_001', '店长张三', '数量改成100斤', previous_snapshot_id=first['snapshot_id'])
+        assert False
+    except ValueError as exc:
+        assert '不匹配' in str(exc)
