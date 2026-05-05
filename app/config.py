@@ -14,6 +14,7 @@ class Settings:
     default_warehouse_alias: str = os.getenv("DEFAULT_WAREHOUSE_ALIAS", "南宁仓")
     snapshot_dir: str = os.getenv("SNAPSHOT_DIR", "data/snapshots")
     master_data_dir: str = os.getenv("MASTER_DATA_DIR", "data/master_data")
+    enable_llm_extractor: bool = os.getenv("ENABLE_LLM_EXTRACTOR", "false").lower() == "true"
 
 
 settings = Settings()

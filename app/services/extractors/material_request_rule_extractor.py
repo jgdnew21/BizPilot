@@ -3,10 +3,12 @@ from __future__ import annotations
 import re
 
 from app.domain.extraction import ExtractionResult, NormalizedText
+from app.services.extractors.base import BaseMaterialRequestExtractor
 from app.domain.purchase.material_request import PurchaseLineInput
 
 
-class RuleBasedMaterialRequestExtractor:
+class RuleBasedMaterialRequestExtractor(BaseMaterialRequestExtractor):
+    name = "rule_based"
     @staticmethod
     def _strip_non_item_segments(text: str) -> str:
         cleaned = text
@@ -65,7 +67,8 @@ class RuleBasedMaterialRequestExtractor:
                 return warehouse
         return None
 
-    def extract(self, normalized: NormalizedText) -> ExtractionResult:
+    def extract(self, normalized_text: NormalizedText) -> ExtractionResult:
+        normalized = normalized_text
         text = normalized.normalized_text
         schedule_input = next((k for k in ("今天", "明天", "后天") if k in text), None)
         supplier_input = self._parse_supplier_input(text)
@@ -86,6 +89,7 @@ class RuleBasedMaterialRequestExtractor:
             items.append(PurchaseLineInput(item_input_name=name, qty=float(match.group("qty")), uom=match.group("uom")))
 
         return ExtractionResult(
+            extractor_name=self.name,
             raw_text=normalized.raw_text,
             normalized_text=normalized.normalized_text,
             schedule_date_input=schedule_input,
