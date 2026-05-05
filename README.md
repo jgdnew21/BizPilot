@@ -133,16 +133,17 @@ curl -X POST http://localhost:8000/api/purchase/material-requests/confirm \
 ```
 
 
-## Future LLM Extractor
+## LLM Extractor
 
-未来 LLM 仅用于自然语言字段抽取，不直接写 ERPNext。
+LLM 只负责自然语言字段抽取，不生成 Markdown，不提交 ERPNext。
 
-BizPilot 安全链路保持为：
+BizPilot 安全链路：
 
 用户原话
-→ Extractor 抽取候选结构
+→ LLM 抽取候选字段
+→ Pydantic 校验
 → 主数据匹配
-→ 业务校验
+→ BusinessValidator
 → Markdown 确认
 → Snapshot
 → 用户确认

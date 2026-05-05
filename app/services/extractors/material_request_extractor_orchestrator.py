@@ -25,14 +25,12 @@ class MaterialRequestExtractorOrchestrator:
         if self._is_complete(rule_result):
             return rule_result
 
-        # Future extension:
-        # if settings.enable_llm_extractor:
-        #     llm_result = self.llm_extractor.extract(normalized_text)
-        #     return merge_result(rule_result, llm_result)
         if settings.enable_llm_extractor:
-            # Placeholder keeps current behavior safe by not calling external services.
-            self.llm_extractor.extract(normalized_text)
+            llm_result = self.llm_extractor.extract(normalized_text)
+            if llm_result.items or llm_result.supplier_input or llm_result.schedule_date_input or llm_result.warehouse_input:
+                return llm_result
+            rule_result.warnings.extend(llm_result.warnings)
 
-        if "Rule extraction incomplete; LLM fallback is not enabled yet." not in rule_result.warnings:
+        if "Rule extraction incomplete; LLM fallback is not enabled yet." not in rule_result.warnings and not settings.enable_llm_extractor:
             rule_result.warnings.append("Rule extraction incomplete; LLM fallback is not enabled yet.")
         return rule_result

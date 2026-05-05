@@ -15,6 +15,11 @@ class Settings:
     snapshot_dir: str = os.getenv("SNAPSHOT_DIR", "data/snapshots")
     master_data_dir: str = os.getenv("MASTER_DATA_DIR", "data/master_data")
     enable_llm_extractor: bool = os.getenv("ENABLE_LLM_EXTRACTOR", "false").lower() == "true"
+    llm_provider: str = os.getenv("LLM_PROVIDER", "openai_compatible")
+    llm_base_url: str = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
+    llm_api_key: str = os.getenv("LLM_API_KEY", "")
+    llm_model: str = os.getenv("LLM_MODEL", "qwen2.5:7b")
+    llm_timeout_seconds: int = int(os.getenv("LLM_TIMEOUT_SECONDS", "20"))
 
 
 settings = Settings()
