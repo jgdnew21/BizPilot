@@ -70,7 +70,8 @@ class RuleBasedMaterialRequestExtractor(BaseMaterialRequestExtractor):
     def extract(self, normalized_text: NormalizedText) -> ExtractionResult:
         normalized = normalized_text
         text = normalized.normalized_text
-        schedule_input = next((k for k in ("今天", "明天", "后天") if k in text), None)
+        m = re.search(r"(今天|明天|后天|大后天|本周[一二三四五六日天]|这周[一二三四五六日天]|下周[一二三四五六日天]|下星期[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[/-]\d{1,2}|(?:[0-9一二三四五六七八九十]+)月(?:[0-9一二三四五六七八九十]+)(?:号|日))", text)
+        schedule_input = m.group(1) if m else None
         supplier_input = self._parse_supplier_input(text)
 
         warehouse_input = self._parse_warehouse_input(text)

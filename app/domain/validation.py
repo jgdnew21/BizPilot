@@ -21,6 +21,8 @@ class BusinessValidator:
         supplier = payload.get("supplier") or {}
         warehouse = payload.get("warehouse") or {}
         items = payload.get("items") or []
+        schedule_date_status = payload.get("schedule_date_status")
+        schedule_date_message = payload.get("schedule_date_message") or ""
 
         if not supplier.get("supplier_input"):
             missing_fields.append("supplier")
@@ -28,6 +30,10 @@ class BusinessValidator:
             missing_fields.append("warehouse")
         if not items:
             missing_fields.append("items")
+        if schedule_date_status == "unparsed":
+            missing_fields.append("schedule_date")
+        if "parsed_date_is_in_past" in schedule_date_message:
+            missing_fields.append("schedule_date_past")
 
         if supplier.get("status") != "matched":
             blocking_reasons.append("supplier_unmatched")
