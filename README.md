@@ -153,3 +153,10 @@ BizPilot 安全链路：
 - `ENABLE_LLM_EXTRACTOR=true`：优先使用 LLM 抽取；若 LLM 失败/超时/返回非法结构，将自动回退到规则抽取。
 - `ENABLE_LLM_EXTRACTOR=false`：只使用规则抽取。
 - 无论 LLM 还是规则抽取，prepare API 始终返回 Markdown 确认单；抽取器元信息会记录到 snapshot（如 `extractor_name`、`extractor_warnings`、`confidence`）。
+
+## 多轮确认单修订策略
+
+- `prepare` 支持可选 `previous_snapshot_id`，用于基于上一版确认单继续修改。
+- 每次修改都会生成全新的 snapshot（revision 递增），并记录 `previous_snapshot_id` 引用。
+- 基于上一版生成新版本后，上一版若仍处于 `ready_for_confirmation` 或 `pending_confirmation`，会被标记为 `superseded`。
+- `confirm` 遇到 `superseded` snapshot 会拒绝提交，并提示“该确认单已有更新版本，请确认最新确认单”。

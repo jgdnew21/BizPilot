@@ -99,3 +99,12 @@ def test_confirm_allows_ready_for_confirmation(monkeypatch):
     sid = wf.prepare('wechat_group_001', 'u_001', '店长张三', '明天要买五常大米80斤，供应商采无忧，入南宁仓')['snapshot_id']
     res = wf.confirm('wechat_group_001', 'u_001', sid, '确认')
     assert res['status'] == 'submitted'
+
+
+def test_confirm_old_snapshot_still_requires_own_status(monkeypatch):
+    monkeypatch.setattr(ErpnextClient, 'create_material_request', lambda self, payload: 'MAT-MR-2026-00003')
+    wf = _wf()
+    old_sid = wf.prepare('wechat_group_001', 'u_001', '店长张三', '明天要买五常大米80斤，供应商采无忧，入南宁仓')['snapshot_id']
+    wf.prepare('wechat_group_001', 'u_001', '店长张三', '数量改成100斤', previous_snapshot_id=old_sid)
+    res = wf.confirm('wechat_group_001', 'u_001', old_sid, '确认')
+    assert res['error_code'] == 'SNAPSHOT_SUPERSEDED'

@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.config import settings
 from app.integrations.erpnext_client import ErpnextClient
@@ -27,7 +27,10 @@ def _workflow() -> MaterialRequestWorkflow:
 
 @router.post("/prepare", response_model=MaterialRequestPrepareResponse)
 def prepare(req: MaterialRequestPrepareRequest):
-    return _workflow().prepare(req.session_id, req.user_id, req.user_name, req.text)
+    try:
+        return _workflow().prepare(req.session_id, req.user_id, req.user_name, req.text, req.previous_snapshot_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/confirm", response_model=MaterialRequestConfirmResponse)

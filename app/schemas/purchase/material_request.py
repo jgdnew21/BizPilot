@@ -6,6 +6,7 @@ class MaterialRequestPrepareRequest(BaseModel):
     user_id: str
     user_name: str
     text: str
+    previous_snapshot_id: str | None = None
 
 
 class MaterialRequestPrepareResponse(BaseModel):
