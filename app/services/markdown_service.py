@@ -34,6 +34,9 @@ class MarkdownService:
 
         if any(i["matched_item"]["status"] != "matched" for i in draft.items) or draft.supplier.status != "matched" or draft.warehouse.status != "matched":
             lines.append("⚠️ 存在未匹配项，暂不能提交。")
+            lines.append("请根据上方提示修正商品、供应商、仓库或单位后，重新生成确认单。")
             lines.append("")
+            return "\n".join(lines)
+
         lines.append("请回复 **“确认”** 提交采购需求计划；如需修改，请直接回复修改内容。")
         return "\n".join(lines)
