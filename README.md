@@ -160,3 +160,9 @@ BizPilot 安全链路：
 - 每次修改都会生成全新的 snapshot（revision 递增），并记录 `previous_snapshot_id` 引用。
 - 基于上一版生成新版本后，上一版若仍处于 `ready_for_confirmation` 或 `pending_confirmation`，会被标记为 `superseded`。
 - `confirm` 遇到 `superseded` snapshot 会拒绝提交，并提示“该确认单已有更新版本，请确认最新确认单”。
+
+## Confirm Safety Boundary
+
+confirm 阶段不再调用 AI，不再解析用户文本，只提交用户已确认的 snapshot。
+
+这是 BizPilot “所见即所写”的核心。
