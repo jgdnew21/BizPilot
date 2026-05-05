@@ -31,6 +31,11 @@ uvicorn app.main:app --reload
 pytest -q
 ```
 
+## OpenClaw 对接文档
+
+- OpenClaw MR Skill 对接说明：`docs/openclaw_mr_skill.md`
+- 端到端调试脚本：`scripts/e2e_mr_flow.sh`
+
 ## 配置
 见 `.env.example`：ERPNext连接信息、默认仓库别名、snapshot/master data路径。
 
