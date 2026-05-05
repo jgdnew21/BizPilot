@@ -13,6 +13,8 @@ class NormalizedText(BaseModel):
 class ExtractionResult(BaseModel):
     raw_text: str
     normalized_text: str
+    intent: str | None = None
+    confidence: float | None = None
     schedule_date_input: str | None = None
     supplier_input: str | None = None
     warehouse_input: str | None = None

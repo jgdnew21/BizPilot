@@ -43,14 +43,13 @@ def test_orchestrator_warns_when_rule_incomplete_and_llm_disabled(monkeypatch):
     assert 'Rule extraction incomplete; LLM fallback is not enabled yet.' in result.warnings
 
 
-def test_llm_placeholder_does_not_call_external_service(monkeypatch):
-    monkeypatch.setattr('requests.get', lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('should not call requests.get')))
-    monkeypatch.setattr('requests.post', lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('should not call requests.post')))
+def test_llm_extractor_handles_upstream_error(monkeypatch):
+    monkeypatch.setattr('requests.post', lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('boom')))
     extractor = LlmMaterialRequestExtractor()
 
     normalized = NormalizedText(raw_text='老板说今天先把常用货备一下', normalized_text='老板说今天先把常用货备一下')
     result = extractor.extract(normalized)
 
     assert result.items == []
-    assert result.extractor_name == 'llm_placeholder'
-    assert 'LLM extractor is not enabled.' in result.warnings
+    assert result.extractor_name == 'llm'
+    assert any('LLM extraction failed' in x for x in result.warnings)
