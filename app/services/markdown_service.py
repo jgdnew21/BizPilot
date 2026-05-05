@@ -26,6 +26,12 @@ class MarkdownService:
             f"- **录入人**：{draft.user_name}",
             "",
         ]
+        if not draft.items:
+            lines.append("⚠️ 未识别到商品明细，暂不能提交。")
+            lines.append("请按“商品 + 数量 + 单位”的格式补充，例如：五常大米 80 斤。")
+            lines.append("")
+            return "\n".join(lines)
+
         if any(i["matched_item"]["status"] != "matched" for i in draft.items) or draft.supplier.status != "matched" or draft.warehouse.status != "matched":
             lines.append("⚠️ 存在未匹配项，暂不能提交。")
             lines.append("")
