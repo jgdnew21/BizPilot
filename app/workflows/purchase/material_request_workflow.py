@@ -15,6 +15,37 @@ class MaterialRequestWorkflow:
         self.snapshot_service = snapshot_service
         self.erpnext_client = erpnext_client
 
+    @staticmethod
+    def _strip_non_item_segments(text: str) -> str:
+        cleaned = text
+        patterns = [
+            r"供应商是?[\u4e00-\u9fa5A-Za-z0-9（）()·\-]+",
+            r"入[\u4e00-\u9fa5A-Za-z0-9（）()·\-]*仓",
+            r"入库到[\u4e00-\u9fa5A-Za-z0-9（）()·\-]*仓?",
+        ]
+        for pattern in patterns:
+            cleaned = re.sub(pattern, " ", cleaned)
+        return cleaned
+
+    def parse_purchase_items(self, text: str):
+        normalized = self._strip_non_item_segments(text)
+        normalized = normalized.replace('要买', ' ').replace('购买', ' ').replace('采购', ' ')
+
+        item_pattern = re.compile(
+            r"(?P<name>[\u4e00-\u9fa5A-Za-z0-9（）()·\-]+?)\s*(?P<qty>\d+(?:\.\d+)?)\s*(?P<uom>斤|盒|个|箱|包|袋|瓶|件|kg|KG|千克)"
+        )
+
+        items = []
+        for match in item_pattern.finditer(normalized):
+            name = match.group("name").strip('，,。;；:： ') 
+            if not name:
+                continue
+            qty = float(match.group("qty"))
+            uom = match.group("uom")
+            matched = self.master_data_service.match_item(name)
+            items.append({"item_input_name": name, "qty": qty, "uom": uom, "matched_item": matched.model_dump()})
+        return items
+
     def _parse(self, text: str):
         schedule_map = {"今天": 0, "明天": 1, "后天": 2}
         schedule_input = next((k for k in schedule_map if k in text), "未明确，默认今天")
@@ -27,14 +58,7 @@ class MaterialRequestWorkflow:
         warehouse_input = warehouse.group(1) if warehouse else settings.default_warehouse_alias
         warehouse_defaulted = warehouse is None
 
-        items = []
-        cleaned = text.replace('要买', '').replace('购买', '')
-        for w in ['今天', '明天', '后天']:
-            cleaned = cleaned.replace(w, '')
-        for name, qty, uom in re.findall(r"([\u4e00-\u9fa5A-Za-z0-9]+?)(\d+)(斤|盒|个)", cleaned):
-            name = name.strip('，,。 ')
-            matched = self.master_data_service.match_item(name)
-            items.append({"item_input_name": name, "qty": float(qty), "uom": uom, "matched_item": matched.model_dump()})
+        items = self.parse_purchase_items(text)
         return schedule_input, schedule_date, supplier_input, warehouse_input, warehouse_defaulted, items
 
     def prepare(self, session_id: str, user_id: str, user_name: str, text: str):
@@ -76,6 +100,8 @@ class MaterialRequestWorkflow:
             return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "供应商未匹配", "error_code": "UNMATCHED_SUPPLIER"}
         if payload["warehouse"]["status"] != "matched":
             return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "仓库未匹配", "error_code": "UNMATCHED_WAREHOUSE"}
+        if not payload.get("items"):
+            return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "未识别到商品明细", "error_code": "EMPTY_ITEMS"}
 
         erp_items = []
         for row in payload["items"]:

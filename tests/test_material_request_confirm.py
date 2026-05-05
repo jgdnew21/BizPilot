@@ -44,3 +44,20 @@ def test_unmatched_item_blocks_submit(monkeypatch):
     res = wf.confirm('wechat_group_001', 'u_001', sid, '确认')
     assert res['error_code'] == 'UNMATCHED_ITEM'
     assert called['v'] is False
+
+
+def test_empty_items_blocks_submit(monkeypatch):
+    called = {'v': False}
+    monkeypatch.setattr(ErpnextClient, 'create_material_request', lambda self, payload: called.__setitem__('v', True))
+    wf = _wf()
+    sid = wf.prepare('wechat_group_001', 'u_001', '店长张三', '明天采购，供应商采无忧，入南宁仓')['snapshot_id']
+    res = wf.confirm('wechat_group_001', 'u_001', sid, '确认')
+    assert res['error_code'] == 'EMPTY_ITEMS'
+    assert called['v'] is False
+
+
+def test_empty_items_markdown_does_not_ask_for_confirm():
+    wf = _wf()
+    res = wf.prepare('wechat_group_001', 'u_001', '店长张三', '明天采购，供应商采无忧，入南宁仓')
+    assert '请回复 **“确认”** 提交采购需求计划' not in res['markdown_text']
+    assert '⚠️ 未识别到商品明细，暂不能提交。' in res['markdown_text']
