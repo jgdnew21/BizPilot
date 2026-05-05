@@ -9,6 +9,7 @@ from app.services.snapshot_service import SnapshotService
 from app.services.text_normalizer import TextNormalizer
 from app.services.extractors import MaterialRequestExtractorOrchestrator
 from app.services.material_request_payload_builder import build_material_request_erpnext_payload
+from app.services.date_parser import DateParser
 from app.integrations.erpnext_client import ErpnextClient
 
 
@@ -19,15 +20,15 @@ class MaterialRequestWorkflow:
         self.erpnext_client = erpnext_client
         self.text_normalizer = TextNormalizer()
         self.extractor = MaterialRequestExtractorOrchestrator()
+        self.date_parser = DateParser()
 
     def _parse(self, text: str):
         normalized = self.text_normalizer.normalize(text)
         extraction = self.extractor.extract(normalized)
 
-        schedule_map = {"今天": 0, "明天": 1, "后天": 2}
-        schedule_input = extraction.schedule_date_input or "未明确，默认今天"
-        delta = schedule_map.get(extraction.schedule_date_input or "", 0)
-        schedule_date = (date.today() + timedelta(days=delta)).isoformat()
+        parsed_date = self.date_parser.parse(extraction.schedule_date_input, base_date=date.today())
+        schedule_input = parsed_date.input_text or "未明确，默认今天"
+        schedule_date = parsed_date.date or ""
 
         warehouse_input = extraction.warehouse_input or settings.default_warehouse_alias
         warehouse_defaulted = extraction.warehouse_input is None
@@ -41,7 +42,7 @@ class MaterialRequestWorkflow:
                 "uom": row.uom,
                 "matched_item": matched.model_dump(),
             })
-        return schedule_input, schedule_date, extraction.supplier_input, warehouse_input, warehouse_defaulted, items, extraction
+        return schedule_input, schedule_date, parsed_date.status, parsed_date.message, extraction.supplier_input, warehouse_input, warehouse_defaulted, items, extraction
 
     def prepare(self, session_id: str, user_id: str, user_name: str, text: str, previous_snapshot_id: str | None = None):
         previous_snapshot = None
@@ -60,16 +61,18 @@ class MaterialRequestWorkflow:
                 f"user_update:\n{text}"
             )
 
-        schedule_input, schedule_date, supplier_input, warehouse_input, defaulted, items, extraction = self._parse(input_text)
+        schedule_input, schedule_date, schedule_status, schedule_message, supplier_input, warehouse_input, defaulted, items, extraction = self._parse(input_text)
         supplier = self.master_data_service.match_supplier(supplier_input)
         warehouse = self.master_data_service.match_warehouse(warehouse_input)
         draft = MaterialRequestDraft(
             session_id=session_id, user_id=user_id, user_name=user_name, raw_text=text,
             schedule_date=schedule_date, schedule_date_input=schedule_input,
+            schedule_date_status=schedule_status, schedule_date_message=schedule_message,
             supplier=supplier, warehouse=warehouse, items=items,
         )
         draft.structured_payload = {
             "doc_type": "material_request", "schedule_date": schedule_date,
+            "schedule_date_input": schedule_input, "schedule_date_status": schedule_status, "schedule_date_message": schedule_message,
             "supplier": supplier.model_dump(), "warehouse": warehouse.model_dump(), "items": items,
             "extractor_name": extraction.extractor_name,
             "extractor_warnings": extraction.warnings,

@@ -30,11 +30,18 @@ class MarkdownService:
         lines += [
             "",
             f"- **供应商**：{draft.supplier.supplier_input} → {draft.supplier.supplier_standard_name}",
-            f"- **需求日期**：{draft.schedule_date_input} → {draft.schedule_date}",
+            f"- **需求日期**：{draft.schedule_date_input} → {draft.schedule_date if draft.schedule_date_status != 'unparsed' else '未识别'}",
             f"- **预计入库仓库**：{wh_label}",
             f"- **录入人**：{draft.user_name}",
             "",
         ]
+        if draft.schedule_date_status == "unparsed":
+            lines.append("- ⚠️ 需求日期未识别，请补充明确日期，例如“明天”或“5月10号”。")
+            lines.append("")
+        if draft.schedule_date_message and "parsed_date_is_in_past" in draft.schedule_date_message:
+            lines.append("- ⚠️ 需求日期早于今天，请确认是否正确。")
+            lines.append("")
+
         if validation_result.status == "needs_clarification":
             lines.append("我识别到你想创建采购需求计划，但还缺少必要信息：")
             lines.append("")

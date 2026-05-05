@@ -24,7 +24,8 @@ SYSTEM_PROMPT = """你是 BizPilot 的采购需求计划 MR 字段抽取器。
 9. 不要判断是否可以提交。
 10. 不要生成用户确认单。
 11. 只抽取候选字段。
-12. 如果用户是在说实际买回来了、已经下单、已经入库，则 intent 不应是 create_material_request。"""
+12. 如果用户是在说实际买回来了、已经下单、已经入库，则 intent 不应是 create_material_request。
+13. 日期字段只输出用户原始表达到 schedule_date_input，不要输出 schedule_date，也不要改写为 YYYY-MM-DD。"""
 
 
 class LlmExtractedItem(BaseModel):

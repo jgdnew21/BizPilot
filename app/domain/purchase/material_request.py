@@ -41,6 +41,8 @@ class MaterialRequestDraft(BaseModel):
     raw_text: str
     schedule_date: str
     schedule_date_input: str
+    schedule_date_status: str = "parsed"
+    schedule_date_message: str | None = None
     supplier: MatchedSupplier
     warehouse: MatchedWarehouse
     items: list[dict[str, Any]]
