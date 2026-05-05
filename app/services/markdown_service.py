@@ -1,9 +1,10 @@
 from app.domain.purchase.material_request import MaterialRequestDraft
+from app.domain.validation import ValidationResult
 
 
 class MarkdownService:
     @staticmethod
-    def build_material_request_markdown(draft: MaterialRequestDraft, warehouse_defaulted: bool = False) -> str:
+    def build_material_request_markdown(draft: MaterialRequestDraft, validation_result: ValidationResult, warehouse_defaulted: bool = False) -> str:
         lines = [
             "## 采购需求计划（待确认）",
             "",
@@ -26,13 +27,13 @@ class MarkdownService:
             f"- **录入人**：{draft.user_name}",
             "",
         ]
-        if not draft.items:
+        if "items" in validation_result.missing_fields:
             lines.append("⚠️ 未识别到商品明细，暂不能提交。")
             lines.append("请按“商品 + 数量 + 单位”的格式补充，例如：五常大米 80 斤。")
             lines.append("")
             return "\n".join(lines)
 
-        if any(i["matched_item"]["status"] != "matched" for i in draft.items) or draft.supplier.status != "matched" or draft.warehouse.status != "matched":
+        if validation_result.status != "ready_for_confirmation":
             lines.append("⚠️ 存在未匹配项，暂不能提交。")
             lines.append("请根据上方提示修正商品、供应商、仓库或单位后，重新生成确认单。")
             lines.append("")
