@@ -11,3 +11,20 @@ class ErpnextClient:
         resp.raise_for_status()
         body = resp.json()
         return body["data"]["name"]
+
+
+    def ping(self) -> tuple[bool, dict]:
+        try:
+            resp = requests.get(
+                f"{self.base_url}/api/method/frappe.auth.get_logged_user",
+                headers=self.headers,
+                timeout=10,
+            )
+            resp.raise_for_status()
+            body = resp.json()
+            user = body.get("message") or body.get("data")
+            return True, {"user": user}
+        except requests.RequestException as exc:
+            return False, {"message": str(exc)}
+        except ValueError:
+            return False, {"message": "invalid ERPNext response"}

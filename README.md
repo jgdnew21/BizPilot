@@ -41,3 +41,93 @@ pytest -q
 - ERPNext master data query
 - OpenClaw 强类型 plugin/tool
 - n8n 编排接入
+
+## 本地验证 MR 最小闭环
+
+1. 安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+2. 准备 `.env`
+
+从 `.env.example` 复制：
+
+```bash
+cp .env.example .env
+```
+
+并配置：
+
+```dotenv
+ERPNEXT_BASE_URL=http://site1.localhost:8080
+ERPNEXT_API_KEY=your_api_key
+ERPNEXT_API_SECRET=your_api_secret
+DEFAULT_WAREHOUSE_ALIAS=南宁仓
+SNAPSHOT_DIR=data/snapshots
+MASTER_DATA_DIR=data/master_data
+```
+
+3. 启动服务
+
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+
+4. 检查服务健康
+
+```bash
+curl http://localhost:8000/health
+```
+
+5. 检查就绪状态
+
+```bash
+curl http://localhost:8000/health/ready
+```
+
+6. 检查 ERPNext 连接
+
+```bash
+curl http://localhost:8000/health/erpnext
+```
+
+7. 调用 MR prepare
+
+```bash
+curl -X POST http://localhost:8000/api/purchase/material-requests/prepare \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "wechat_group_001",
+    "user_id": "u_001",
+    "user_name": "店长张三",
+    "text": "后天要买五常大米80斤，嘉木东来寿眉白茶10盒，萌考拉冰淇淋100个，供应商采无忧，入南宁仓"
+  }'
+```
+
+响应中应返回 `snapshot_id` 和 `markdown_text`。
+
+8. 调用 MR confirm
+
+将上一步返回的 `snapshot_id` 替换进去：
+
+```bash
+curl -X POST http://localhost:8000/api/purchase/material-requests/confirm \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "wechat_group_001",
+    "user_id": "u_001",
+    "snapshot_id": "替换为上一步返回的 snapshot_id",
+    "confirm_text": "确认"
+  }'
+```
+
+成功后应返回：
+
+```json
+{
+  "status": "submitted",
+  "erpnext_doc_no": "MAT-MR-..."
+}
+```
