@@ -56,11 +56,17 @@ class MaterialRequestWorkflow:
             "supplier": supplier.model_dump(), "warehouse": warehouse.model_dump(), "items": items,
         }
         validation_result = BusinessValidator.validate_material_request_payload(draft.structured_payload)
+        draft.structured_payload.update({
+            "draft_status": validation_result.status,
+            "can_confirm": validation_result.can_confirm,
+            "missing_fields": validation_result.missing_fields,
+            "blocking_reasons": validation_result.blocking_reasons,
+        })
         draft.markdown_text = MarkdownService.build_material_request_markdown(draft, validation_result, warehouse_defaulted=defaulted)
 
         snap = PurchaseSnapshot(
             snapshot_id=self.snapshot_service.generate_snapshot_id(), doc_type="material_request",
-            session_id=session_id, user_id=user_id, status="pending_confirmation", raw_text=text,
+            session_id=session_id, user_id=user_id, status=validation_result.status, raw_text=text,
             markdown_text=draft.markdown_text, structured_payload=draft.structured_payload,
         )
         self.snapshot_service.save(snap)
@@ -72,24 +78,19 @@ class MaterialRequestWorkflow:
             return {"snapshot_id": snapshot_id, "doc_type": "material_request", "status": "invalid", "erpnext_doc_no": None, "message": "snapshot不存在", "error_code": "SNAPSHOT_NOT_FOUND"}
         if snap.session_id != session_id or snap.user_id != user_id:
             return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "会话或用户不匹配", "error_code": "IDENTITY_MISMATCH"}
-        if snap.status != "pending_confirmation":
+        if snap.status not in {"ready_for_confirmation", "needs_clarification", "blocked"}:
             return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "snapshot状态不可确认", "error_code": "INVALID_STATUS"}
         if confirm_text.strip() != "确认":
             return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "confirm_text必须为确认", "error_code": "INVALID_CONFIRM_TEXT"}
 
         payload = snap.structured_payload
         validation_result = BusinessValidator.validate_material_request_payload(payload)
-        if not validation_result.can_confirm:
-            if "supplier_unmatched" in validation_result.blocking_reasons:
-                return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "供应商未匹配，不能提交采购需求计划。请先确认供应商名称。", "error_code": "UNMATCHED_SUPPLIER"}
-            if "warehouse_unmatched" in validation_result.blocking_reasons:
-                return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "仓库未匹配", "error_code": "UNMATCHED_WAREHOUSE"}
-            if "items" in validation_result.missing_fields:
-                return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "未识别到商品明细", "error_code": "EMPTY_ITEMS"}
-            if "item_unmatched" in validation_result.blocking_reasons:
-                return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "商品未匹配", "error_code": "UNMATCHED_ITEM"}
-            if "uom_mismatch" in validation_result.blocking_reasons:
-                return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "单位与采购单位不一致", "error_code": "UOM_MISMATCH"}
+        snapshot_draft_status = payload.get("draft_status", validation_result.status)
+        snapshot_can_confirm = payload.get("can_confirm", validation_result.can_confirm)
+        if snapshot_draft_status == "blocked":
+            return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "当前采购需求计划存在未匹配或校验失败项，不能提交。请先修正后重新生成确认单。", "error_code": "BLOCKED_DRAFT"}
+        if snapshot_draft_status == "needs_clarification" or not snapshot_can_confirm:
+            return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "当前采购需求计划信息不完整，不能提交。请先补充缺失信息。", "error_code": "INCOMPLETE_DRAFT"}
 
         erp_items = []
         for row in payload["items"]:
