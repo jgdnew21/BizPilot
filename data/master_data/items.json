@@ -1,5 +1,5 @@
 [
   {"aliases": ["五常大米", "大米"], "item_code": "002138", "item_name": "五常大米", "purchase_uom": "斤"},
-  {"aliases": ["大头鱼", "大脑袋鱼"], "item_code": "002130", "item_name": "大头鱼", "purchase_uom": "盒"},
+  {"aliases": ["大头鱼", "大脑袋鱼"], "item_code": "002130", "item_name": "大头鱼", "purchase_uom": "斤"},
   {"aliases": ["萌考拉冰淇淋", "冰淇淋"], "item_code": "002136", "item_name": "萌考拉冰淇淋", "purchase_uom": "个"}
 ]
