@@ -20,8 +20,7 @@ class MasterDataCacheRepository:
 
     def _init_db(self) -> None:
         with self._connect() as conn:
-            conn.executescript(
-                """
+            conn.executescript("""
                 CREATE TABLE IF NOT EXISTS erpnext_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     item_code TEXT NOT NULL UNIQUE,
@@ -67,8 +66,7 @@ class MasterDataCacheRepository:
                     synced_at TEXT NOT NULL,
                     raw_json TEXT NOT NULL
                 );
-                """
-            )
+                """)
 
     def upsert_items(self, rows: list[dict[str, Any]]) -> int:
         synced_at = self._now()
@@ -196,7 +194,15 @@ class MasterDataCacheRepository:
             uom = row.get("name")
             if not uom:
                 continue
-            payload.append((uom, self._bool_to_int(row.get("enabled")), row.get("modified"), synced_at, self._dump(row)))
+            payload.append(
+                (
+                    uom,
+                    self._bool_to_int(row.get("enabled")),
+                    row.get("modified"),
+                    synced_at,
+                    self._dump(row),
+                )
+            )
         with self._connect() as conn:
             conn.executemany(
                 """
@@ -212,8 +218,45 @@ class MasterDataCacheRepository:
             )
         return len(payload)
 
+    def list_items(self) -> list[dict[str, Any]]:
+        return self._fetch_all("erpnext_items", "item_code")
+
+    def list_suppliers(self) -> list[dict[str, Any]]:
+        return self._fetch_all("erpnext_suppliers", "supplier")
+
+    def list_warehouses(self) -> list[dict[str, Any]]:
+        return self._fetch_all("erpnext_warehouses", "warehouse")
+
+    def list_uoms(self) -> list[dict[str, Any]]:
+        return self._fetch_all("erpnext_uoms", "uom")
+
+    def _fetch_all(self, table_name: str, order_by: str) -> list[dict[str, Any]]:
+        allowed_tables = {
+            "erpnext_items": {"item_code"},
+            "erpnext_suppliers": {"supplier"},
+            "erpnext_warehouses": {"warehouse"},
+            "erpnext_uoms": {"uom"},
+        }
+        if (
+            table_name not in allowed_tables
+            or order_by not in allowed_tables[table_name]
+        ):
+            raise ValueError(
+                f"Unsupported master data cache lookup: {table_name}.{order_by}"
+            )
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM {table_name} ORDER BY {order_by}"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def count(self, table_name: str) -> int:
-        allowed_tables = {"erpnext_items", "erpnext_suppliers", "erpnext_warehouses", "erpnext_uoms"}
+        allowed_tables = {
+            "erpnext_items",
+            "erpnext_suppliers",
+            "erpnext_warehouses",
+            "erpnext_uoms",
+        }
         if table_name not in allowed_tables:
             raise ValueError(f"Unsupported master data cache table: {table_name}")
         with self._connect() as conn:

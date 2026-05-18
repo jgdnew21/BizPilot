@@ -13,10 +13,20 @@ class Settings:
     erpnext_api_secret: str = os.getenv("ERPNEXT_API_SECRET", "")
     erpnext_company: str = os.getenv("ERPNEXT_COMPANY", "")
     default_warehouse_alias: str = os.getenv("DEFAULT_WAREHOUSE_ALIAS", "南宁仓")
+    default_purchase_warehouse: str = os.getenv(
+        "DEFAULT_PURCHASE_WAREHOUSE", os.getenv("DEFAULT_WAREHOUSE_ALIAS", "南宁仓")
+    )
+    default_purchase_supplier: str = os.getenv(
+        "DEFAULT_PURCHASE_SUPPLIER", "市场采购供应商"
+    )
     snapshot_dir: str = os.getenv("SNAPSHOT_DIR", "data/snapshots")
     master_data_dir: str = os.getenv("MASTER_DATA_DIR", "data/master_data")
-    master_data_cache_db: str = os.getenv("MASTER_DATA_CACHE_DB", "data/master_data_cache.sqlite3")
-    enable_llm_extractor: bool = os.getenv("ENABLE_LLM_EXTRACTOR", "false").lower() == "true"
+    master_data_cache_db: str = os.getenv(
+        "MASTER_DATA_CACHE_DB", "data/master_data_cache.sqlite3"
+    )
+    enable_llm_extractor: bool = (
+        os.getenv("ENABLE_LLM_EXTRACTOR", "false").lower() == "true"
+    )
     llm_provider: str = os.getenv("LLM_PROVIDER", "openai_compatible")
     llm_base_url: str = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
     llm_api_key: str = os.getenv("LLM_API_KEY", "")
