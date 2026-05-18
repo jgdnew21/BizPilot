@@ -13,6 +13,8 @@ def _clean_url(value: str) -> str:
 ERPNEXT_BASE_URL = _clean_url(os.getenv("ERPNEXT_BASE_URL", ""))
 ERPNEXT_API_KEY = os.getenv("ERPNEXT_API_KEY", "").strip()
 ERPNEXT_API_SECRET = os.getenv("ERPNEXT_API_SECRET", "").strip()
+ERPNEXT_COMPANY = os.getenv("ERPNEXT_COMPANY", os.getenv("DEFAULT_COMPANY", "")).strip()
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./app/data/bizpilot_cache.db").strip()
 
 SNAPSHOT_DIR = Path(os.getenv("SNAPSHOT_DIR", "./app/data/snapshots"))
 SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
