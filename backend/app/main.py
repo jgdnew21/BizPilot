@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 #
 # 下一步我给你更新 runtime 文件时，会严格按这个接口实现，
 # 这样 main.py 和 runtime.py 两边保持完全一致。
+from app.api.erpnext_sync import router as erpnext_sync_router
 from app.services.purchase_skill_runtime import confirm_purchase, prepare_purchase
 
 app = FastAPI(
@@ -23,6 +24,8 @@ app = FastAPI(
         "prepare（整理并生成确认单） + confirm（基于确认快照正式提交）。"
     ),
 )
+
+app.include_router(erpnext_sync_router)
 
 
 # =========================

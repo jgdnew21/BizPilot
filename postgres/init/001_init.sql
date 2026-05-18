@@ -71,3 +71,49 @@ values
   ('嘉木东来寿眉白茶', '寿眉白茶', '盒'),
   ('萌考拉冰淇淋', '冰淇淋', '个')
 on conflict (name) do nothing;
+
+create table if not exists erpnext_item_cache (
+  id bigserial primary key,
+  item_code varchar(255) not null unique,
+  item_name varchar(255),
+  item_group varchar(255),
+  stock_uom varchar(100),
+  disabled boolean,
+  is_stock_item boolean,
+  description text,
+  erp_modified varchar(64),
+  synced_at timestamptz not null default now(),
+  raw_json jsonb not null
+);
+
+create table if not exists erpnext_supplier_cache (
+  id bigserial primary key,
+  supplier varchar(255) not null unique,
+  supplier_name varchar(255),
+  supplier_group varchar(255),
+  disabled boolean,
+  erp_modified varchar(64),
+  synced_at timestamptz not null default now(),
+  raw_json jsonb not null
+);
+
+create table if not exists erpnext_warehouse_cache (
+  id bigserial primary key,
+  warehouse varchar(255) not null unique,
+  warehouse_name varchar(255),
+  company varchar(255),
+  is_group boolean,
+  disabled boolean,
+  erp_modified varchar(64),
+  synced_at timestamptz not null default now(),
+  raw_json jsonb not null
+);
+
+create table if not exists erpnext_uom_cache (
+  id bigserial primary key,
+  uom varchar(255) not null unique,
+  enabled boolean,
+  erp_modified varchar(64),
+  synced_at timestamptz not null default now(),
+  raw_json jsonb not null
+);
