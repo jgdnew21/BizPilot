@@ -55,6 +55,13 @@ class PurchaseSnapshot(BaseModel):
     doc_type: str
     session_id: str
     user_id: str
+    user_name: str | None = None
+    source_channel: str | None = None
+    source_type: str | None = None
+    raw_images: list[str] = Field(default_factory=list)
+    raw_supplier_name: str | None = None
+    erp_supplier_name: str | None = None
+    warehouse: str | None = None
     status: Literal[
         "ready_for_confirmation",
         "needs_clarification",
@@ -65,6 +72,8 @@ class PurchaseSnapshot(BaseModel):
         "submitted",
         "submit_failed",
         "invalid",
+        "needs_user_fix",
+        "erp_draft_created",
     ]
     raw_text: str
     markdown_text: str
@@ -72,6 +81,8 @@ class PurchaseSnapshot(BaseModel):
     previous_snapshot_id: str | None = None
     revision: int = 1
     erpnext_doc_no: str | None = None
+    erp_purchase_receipt_name: str | None = None
+    validation_result: dict[str, Any] = Field(default_factory=dict)
     error_message: str | None = None
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     confirmed_at: str | None = None
