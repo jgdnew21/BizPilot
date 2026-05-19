@@ -23,3 +23,19 @@ class SnapshotRepository:
 
     def update(self, snapshot: PurchaseSnapshot) -> None:
         self.save(snapshot)
+
+    def latest_by_session_and_status(
+        self, session_id: str, status: str, doc_type: str | None = None
+    ) -> PurchaseSnapshot | None:
+        snapshots: list[PurchaseSnapshot] = []
+        for path in self.snapshot_dir.glob("*.json"):
+            snap = PurchaseSnapshot.model_validate_json(path.read_text(encoding="utf-8"))
+            if snap.session_id != session_id or snap.status != status:
+                continue
+            if doc_type and snap.doc_type != doc_type:
+                continue
+            snapshots.append(snap)
+        if not snapshots:
+            return None
+        snapshots.sort(key=lambda s: s.created_at, reverse=True)
+        return snapshots[0]

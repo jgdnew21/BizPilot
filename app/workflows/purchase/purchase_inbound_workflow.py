@@ -8,9 +8,11 @@ from uuid import uuid4
 
 from app.config import settings
 from app.domain.purchase.material_request import PurchaseSnapshot
+from app.integrations.erpnext_client import ErpnextApiError, ErpnextClient
 from app.repositories.master_data_cache_repository import MasterDataCacheRepository
 from app.schemas.master_data_match import MatchResult, ValidationResult
 from app.schemas.purchase.purchase_inbound import (
+    PurchaseInboundConfirmRequest,
     PurchaseInboundPrepareRequest,
     ValidationIssue,
 )
@@ -41,9 +43,11 @@ class PurchaseInboundWorkflow:
         self,
         match_service: MasterDataMatchService,
         snapshot_service: SnapshotService,
+        erpnext_client: ErpnextClient,
     ):
         self.match_service = match_service
         self.snapshot_service = snapshot_service
+        self.erpnext_client = erpnext_client
 
     @classmethod
     def from_settings(cls) -> "PurchaseInboundWorkflow":
@@ -52,7 +56,125 @@ class PurchaseInboundWorkflow:
                 MasterDataCacheRepository(settings.master_data_cache_db)
             ),
             snapshot_service=SnapshotService.from_settings(),
+            erpnext_client=ErpnextClient(
+                settings.erpnext_base_url,
+                settings.erpnext_api_key,
+                settings.erpnext_api_secret,
+            ),
         )
+
+    def confirm(self, req: PurchaseInboundConfirmRequest) -> dict[str, Any]:
+        if req.confirm_text.strip() != "确认入库":
+            return {
+                "status": "invalid_confirm_text",
+                "snapshot_id": req.snapshot_id or "",
+                "message": "请回复“确认入库”以创建采购入库草稿。",
+                "error_detail": None,
+            }
+
+        snap = self._resolve_snapshot(req)
+        if not snap:
+            return {
+                "status": "snapshot_not_found",
+                "snapshot_id": req.snapshot_id or "",
+                "message": "未找到可确认的采购入库快照。",
+                "error_detail": None,
+            }
+        if snap.session_id != req.session_id or snap.user_id != req.user_id:
+            return {
+                "status": "snapshot_identity_mismatch",
+                "snapshot_id": snap.snapshot_id,
+                "message": "snapshot 与当前会话或用户不匹配。",
+                "error_detail": None,
+            }
+        if snap.status == "erp_draft_created" and snap.erp_purchase_receipt_name:
+            return {
+                "status": "erp_draft_created",
+                "snapshot_id": snap.snapshot_id,
+                "erp_purchase_receipt_name": snap.erp_purchase_receipt_name,
+                "message": f"已创建 ERPNext 采购入库草稿：{snap.erp_purchase_receipt_name}，请在 ERPNext 中复核后提交。",
+                "error_detail": None,
+            }
+        if snap.status != "pending_confirmation":
+            return {
+                "status": "invalid_snapshot_status",
+                "snapshot_id": snap.snapshot_id,
+                "message": f"当前 snapshot 状态为 {snap.status}，不可确认入库。",
+                "error_detail": None,
+            }
+
+        payload = self._build_purchase_receipt_payload(snap)
+        try:
+            pr_name = self.erpnext_client.create_purchase_receipt(payload)
+            snap.status = "erp_draft_created"
+            snap.erp_purchase_receipt_name = pr_name
+            snap.submitted_at = datetime.utcnow().isoformat()
+            snap.error_message = None
+            self.snapshot_service.update(snap)
+            return {
+                "status": "erp_draft_created",
+                "snapshot_id": snap.snapshot_id,
+                "erp_purchase_receipt_name": pr_name,
+                "message": f"已创建 ERPNext 采购入库草稿：{pr_name}，请在 ERPNext 中复核后提交。",
+                "error_detail": None,
+            }
+        except ErpnextApiError as exc:
+            snap.status = "erp_create_failed"
+            snap.error_message = exc.response_text_summary
+            self.snapshot_service.update(snap)
+            return {
+                "status": "erp_create_failed",
+                "snapshot_id": snap.snapshot_id,
+                "erp_purchase_receipt_name": None,
+                "message": f"创建 ERPNext 采购入库草稿失败：{exc.response_text_summary}",
+                "error_detail": exc.response_text_summary,
+            }
+
+    def _resolve_snapshot(
+        self, req: PurchaseInboundConfirmRequest
+    ) -> PurchaseSnapshot | None:
+        if req.snapshot_id:
+            return self.snapshot_service.get(req.snapshot_id)
+        return self.snapshot_service.latest_by_session_and_status(
+            req.session_id, "pending_confirmation", doc_type="purchase_inbound"
+        )
+
+    def _build_purchase_receipt_payload(self, snap: PurchaseSnapshot) -> dict[str, Any]:
+        structured = snap.structured_payload or {}
+        supplier = (structured.get("supplier") or {}).get("erp_supplier_name")
+        warehouse = structured.get("warehouse")
+        items = structured.get("items") or []
+        if not supplier or not warehouse or not items:
+            raise ErpnextApiError(400, "snapshot", "structured_payload 不完整")
+        erp_items = []
+        for row in items:
+            item_code = row.get("item_code")
+            qty = float(row.get("qty") or 0)
+            rate = float(row.get("rate") or 0)
+            if not item_code:
+                raise ErpnextApiError(400, "snapshot", "存在未匹配 item_code")
+            if qty <= 0:
+                raise ErpnextApiError(400, "snapshot", "存在数量小于等于 0 的明细")
+            if rate < 0:
+                raise ErpnextApiError(400, "snapshot", "存在单价小于 0 的明细")
+            erp_items.append(
+                {
+                    "item_code": item_code,
+                    "qty": qty,
+                    "uom": row.get("uom"),
+                    "rate": rate,
+                    "amount": float(row.get("amount") or qty * rate),
+                    "warehouse": warehouse,
+                }
+            )
+        return {
+            "doctype": "Purchase Receipt",
+            "supplier": supplier,
+            "posting_date": datetime.utcnow().date().isoformat(),
+            "set_warehouse": warehouse,
+            "items": erp_items,
+            "remarks": f"来源：{snap.source_channel or 'unknown'} 采购报单；snapshot_id={snap.snapshot_id}；原始报单：{snap.raw_text}",
+        }
 
     def prepare(self, req: PurchaseInboundPrepareRequest) -> dict[str, Any]:
         parsed_lines = self._parse_lines(req.text)

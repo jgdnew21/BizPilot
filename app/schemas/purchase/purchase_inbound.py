@@ -29,3 +29,18 @@ class PurchaseInboundPrepareResponse(BaseModel):
     snapshot_id: str
     markdown: str
     validation: PurchaseInboundValidation
+
+
+class PurchaseInboundConfirmRequest(BaseModel):
+    session_id: str
+    user_id: str
+    confirm_text: str
+    snapshot_id: str | None = None
+
+
+class PurchaseInboundConfirmResponse(BaseModel):
+    status: str
+    snapshot_id: str
+    erp_purchase_receipt_name: str | None = None
+    message: str
+    error_detail: str | None = None

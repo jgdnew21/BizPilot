@@ -115,3 +115,22 @@ class ErpnextClient:
             return False, {"message": str(exc)}
         except ValueError:
             return False, {"message": "invalid ERPNext response"}
+
+    def create_purchase_receipt(self, payload: dict) -> str:
+        resp = requests.post(
+            f"{self.base_url}/api/resource/Purchase Receipt",
+            json=payload,
+            headers=self.headers,
+            timeout=20,
+        )
+        if resp.status_code >= 400:
+            response_text_summary = (resp.text or "")[:1000].strip() or "(empty response body)"
+            logger.error(
+                "ERPNext create Purchase Receipt failed: status_code=%s url=%s response_text=%s",
+                resp.status_code,
+                resp.url,
+                response_text_summary,
+            )
+            raise ErpnextApiError(resp.status_code, resp.url, response_text_summary)
+        body = resp.json()
+        return body["data"]["name"]
