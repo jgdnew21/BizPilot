@@ -74,6 +74,8 @@ class PurchaseSnapshot(BaseModel):
         "invalid",
         "needs_user_fix",
         "erp_draft_created",
+        "erp_create_failed",
+        "cancelled",
     ]
     raw_text: str
     markdown_text: str

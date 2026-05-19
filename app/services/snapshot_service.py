@@ -25,3 +25,8 @@ class SnapshotService:
 
     def update(self, snapshot: PurchaseSnapshot) -> None:
         self.repository.update(snapshot)
+
+    def latest_by_session_and_status(
+        self, session_id: str, status: str, doc_type: str | None = None
+    ) -> PurchaseSnapshot | None:
+        return self.repository.latest_by_session_and_status(session_id, status, doc_type)
