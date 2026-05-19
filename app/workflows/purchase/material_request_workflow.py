@@ -107,7 +107,7 @@ class MaterialRequestWorkflow:
             return {"snapshot_id": snapshot_id, "doc_type": "material_request", "status": "invalid", "erpnext_doc_no": None, "message": "找不到待确认的采购需求计划。", "error_code": "SNAPSHOT_NOT_FOUND"}
         if snap.session_id != session_id or snap.user_id != user_id:
             return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "当前确认请求与原采购需求不匹配，不能提交。", "error_code": "IDENTITY_MISMATCH"}
-        if confirm_text.strip() != "确认":
+        if confirm_text.strip() not in {"确认", "确认采购需求"}:
             return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "请回复“确认”提交，或回复修改内容重新生成确认单。", "error_code": "INVALID_CONFIRM_TEXT"}
         if snap.status == "superseded":
             return {"snapshot_id": snapshot_id, "doc_type": snap.doc_type, "status": "invalid", "erpnext_doc_no": None, "message": "该确认单已有更新版本，请确认最新确认单。", "error_code": "SNAPSHOT_SUPERSEDED"}
