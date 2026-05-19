@@ -186,3 +186,11 @@ def test_confirm_failure_message_says_material_request_not_purchase_order(monkey
     res = wf.confirm('wechat_group_001', 'u_001', sid, '确认')
     assert '采购需求计划' in res['message']
     assert '采购订单' not in res['message']
+
+
+def test_confirm_accepts_confirm_purchase_request_text(monkeypatch):
+    monkeypatch.setattr(ErpnextClient, 'create_material_request', lambda self, payload: 'MAT-MR-2026-00100')
+    wf = _wf()
+    sid = wf.prepare('wechat_group_001', 'u_001', '店长张三', '明天要买五常大米80斤，供应商采无忧，入南宁仓')['snapshot_id']
+    res = wf.confirm('wechat_group_001', 'u_001', sid, '确认采购需求')
+    assert res['status'] == 'submitted'
