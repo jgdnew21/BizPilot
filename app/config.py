@@ -47,6 +47,15 @@ class Settings:
     llm_api_key: str = os.getenv("LLM_API_KEY", "")
     llm_model: str = os.getenv("LLM_MODEL", "qwen2.5:7b")
     llm_timeout_seconds: int = int(os.getenv("LLM_TIMEOUT_SECONDS", "20"))
+    debug_purchase_inbound: bool = (
+        os.getenv("BIZPILOT_DEBUG_PURCHASE_INBOUND", "false").lower() == "true"
+    )
+    debug_master_data_match: bool = (
+        os.getenv("BIZPILOT_DEBUG_MASTER_DATA_MATCH", "false").lower() == "true"
+    )
+    debug_sqlite_cache: bool = (
+        os.getenv("BIZPILOT_DEBUG_SQLITE_CACHE", "false").lower() == "true"
+    )
 
 
 settings = Settings()

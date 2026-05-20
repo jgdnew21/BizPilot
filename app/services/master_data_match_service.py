@@ -6,9 +6,11 @@ When no unique item can be determined, the service must not auto-select an item.
 from __future__ import annotations
 
 from difflib import SequenceMatcher
+import logging
 import unicodedata
 from typing import Any
 
+logger = logging.getLogger(__name__)
 from app.config import settings
 from app.repositories.master_data_cache_repository import MasterDataCacheRepository
 from app.schemas.master_data_match import MatchResult, ValidationResult
@@ -60,6 +62,16 @@ class MasterDataMatchService:
 
     def match_item(self, input_name: str) -> MatchResult:
         """Match item with deterministic priority and avoid unsafe auto-selection."""
+        if settings.debug_master_data_match:
+            logger.info(
+                "[master-data-match-debug] match_item start input=%r normalized=%r",
+                input_name,
+                self._normalize(input_name),
+            )
+            logger.info(
+                "[master-data-match-debug] match_item query table=erpnext_items fields=item_code,item_name keyword=%r",
+                input_name,
+            )
         rows = self.repository.list_items()
         exact = self._exact_matches(
             input_name, rows, ("item_code", "item_name"), normalized=False
@@ -80,6 +92,12 @@ class MasterDataMatchService:
             candidate for candidate in candidates if candidate["score"] >= 0.75
         ]
         if not high_confidence:
+            if settings.debug_master_data_match:
+                logger.info(
+                    "[master-data-match-debug] match_item result status=not_found input=%r normalized=%r",
+                    input_name,
+                    self._normalize(input_name),
+                )
             return MatchResult(
                 status="not_found", input=input_name, message="未找到匹配商品"
             )
@@ -106,6 +124,7 @@ class MasterDataMatchService:
             candidates=high_confidence,
             message="找到多个可能商品，请人工确认",
         )
+        
 
     def match_supplier(
         self, input_name: str | None, default_supplier: str | None = None
@@ -113,6 +132,26 @@ class MasterDataMatchService:
         effective_input = (
             input_name or default_supplier or settings.default_purchase_supplier
         )
+        if settings.debug_master_data_match:
+            logger.info(
+                "[master-data-match-debug] match_supplier start input=%r normalized=%r",
+                input_name,
+                self._normalize(input_name or ""),
+            )
+            logger.info(
+                "[master-data-match-debug] match_supplier default_supplier=%r",
+                default_supplier or settings.default_purchase_supplier,
+            )
+            logger.info(
+                "[master-data-match-debug] match_supplier special_case other_supplier=%s",
+                False,
+            )
+            if input_name and not effective_input == input_name:
+                logger.info(
+                    "[master-data-match-debug] match_supplier supplier input=%r replaced_by_default_supplier=%r",
+                    input_name,
+                    effective_input,
+                )
         if not effective_input:
             return MatchResult(
                 status="not_found",
@@ -121,6 +160,11 @@ class MasterDataMatchService:
             )
 
         rows = self.repository.list_suppliers()
+        if settings.debug_master_data_match:
+            logger.info(
+                "[master-data-match-debug] match_supplier query table=erpnext_suppliers fields=supplier,supplier_name keyword=%r",
+                effective_input,
+            )
         exact = self._exact_matches(
             effective_input, rows, ("supplier", "supplier_name"), normalized=False
         )
@@ -142,6 +186,11 @@ class MasterDataMatchService:
         ]
         if not high_confidence:
             message = "默认供应商不存在于缓存" if not input_name else "未找到匹配供应商"
+            if settings.debug_master_data_match and message == "默认供应商不存在于缓存":
+                logger.info(
+                    "[master-data-match-debug] match_supplier default supplier not found default_supplier=%r",
+                    effective_input,
+                )
             return MatchResult(status="not_found", input=input_name, message=message)
         if len(high_confidence) == 1:
             candidate = high_confidence[0]
@@ -170,6 +219,20 @@ class MasterDataMatchService:
 
     def validate_warehouse(self, warehouse: str | None = None) -> ValidationResult:
         effective_warehouse = warehouse or settings.default_purchase_warehouse
+        if settings.debug_master_data_match:
+            logger.info(
+                "[master-data-match-debug] match_warehouse start input=%r normalized=%r",
+                warehouse,
+                self._normalize(effective_warehouse or ""),
+            )
+            logger.info(
+                "[master-data-match-debug] match_warehouse default_warehouse=%r",
+                settings.default_purchase_warehouse,
+            )
+            logger.info(
+                "[master-data-match-debug] match_warehouse query table=erpnext_warehouses fields=warehouse,warehouse_name keyword=%r",
+                effective_warehouse,
+            )
         if not effective_warehouse:
             return ValidationResult(
                 status="validation_failed",
@@ -208,6 +271,21 @@ class MasterDataMatchService:
         )
 
     def validate_uom(self, uom: str) -> ValidationResult:
+        if settings.debug_master_data_match:
+            logger.info(
+                "[master-data-match-debug] match_uom start input=%r normalized=%r",
+                uom,
+                self._normalize(uom),
+            )
+            logger.info(
+                "[master-data-match-debug] match_uom alias input=%r mapped=%r",
+                uom,
+                uom,
+            )
+            logger.info(
+                "[master-data-match-debug] match_uom query table=erpnext_uoms fields=uom keyword=%r",
+                uom,
+            )
         matches = self._exact_matches(
             uom, self.repository.list_uoms(), ("uom",), normalized=True
         )
@@ -237,7 +315,21 @@ class MasterDataMatchService:
     def _item_match_from_candidates(
         self, input_name: str, rows: list[dict[str, Any]], message: str
     ) -> MatchResult:
+        if settings.debug_master_data_match:
+            logger.info(
+                "[master-data-match-debug] match_item candidates_count=%s",
+                len(rows),
+            )
         candidates = [self._item_result(row, 1.0, "exact") for row in rows]
+        if settings.debug_master_data_match:
+            for i, candidate in enumerate(candidates[:5]):
+                logger.info(
+                    "[master-data-match-debug] match_item candidate[%s] name=%r item_code=%r item_name=%r",
+                    i,
+                    candidate.get("item_name"),
+                    candidate.get("item_code"),
+                    candidate.get("item_name"),
+                )
         enabled = [
             candidate for candidate in candidates if not candidate.get("disabled")
         ]
@@ -250,6 +342,12 @@ class MasterDataMatchService:
                 message="商品已禁用，不能自动匹配",
             )
         if len(enabled) == 1 and len(candidates) == 1:
+            if settings.debug_master_data_match:
+                logger.info(
+                    "[master-data-match-debug] match_item result status=matched item_code=%r item_name=%r",
+                    enabled[0].get("item_code"),
+                    enabled[0].get("item_name"),
+                )
             return MatchResult(
                 status="matched",
                 input=input_name,
@@ -267,7 +365,20 @@ class MasterDataMatchService:
     def _supplier_match_from_candidates(
         self, raw_input: str | None, effective_input: str, rows: list[dict[str, Any]]
     ) -> MatchResult:
+        if settings.debug_master_data_match:
+            logger.info(
+                "[master-data-match-debug] match_supplier candidates_count=%s",
+                len(rows),
+            )
         candidates = [self._supplier_result(row, 1.0, "exact") for row in rows]
+        if settings.debug_master_data_match:
+            for i, candidate in enumerate(candidates[:5]):
+                logger.info(
+                    "[master-data-match-debug] match_supplier candidate[%s] name=%r supplier_name=%r",
+                    i,
+                    candidate.get("supplier"),
+                    candidate.get("supplier_name"),
+                )
         enabled = [
             candidate for candidate in candidates if not candidate.get("disabled")
         ]
@@ -283,6 +394,11 @@ class MasterDataMatchService:
                 message="供应商已禁用，不能自动匹配",
             )
         if len(enabled) == 1 and len(candidates) == 1:
+            if settings.debug_master_data_match:
+                logger.info(
+                    "[master-data-match-debug] match_supplier result status=matched supplier_name=%r",
+                    (enabled[0].get("supplier_name") or enabled[0].get("supplier")),
+                )
             return MatchResult(
                 status="matched",
                 input=raw_input,

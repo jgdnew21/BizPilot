@@ -5,24 +5,74 @@ This repository stores synchronized snapshots in local SQLite for low-latency se
 No purchase business logic should be implemented here.
 """
 import json
+import logging
+import os
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 class MasterDataCacheRepository:
     """SQLite-backed cache for ERPNext master data snapshots."""
 
     def __init__(self, db_path: str):
+        self._raw_db_path = db_path
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
+        self._debug_log_db_info()
+        self._debug_log_table_counts()
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def _debug_log_db_info(self) -> None:
+        if not settings.debug_sqlite_cache:
+            return
+        absolute = self.db_path.resolve()
+        exists = absolute.exists()
+        size = absolute.stat().st_size if exists else 0
+        logger.info(
+            "[sqlite-cache-debug] MASTER_DATA_CACHE_DB raw=%r absolute=%r exists=%s size=%s cwd=%r",
+            self._raw_db_path,
+            str(absolute),
+            exists,
+            size,
+            os.getcwd(),
+        )
+
+    def _debug_log_table_counts(self) -> None:
+        if not settings.debug_sqlite_cache:
+            return
+        counts: dict[str, int] = {}
+        for table in (
+            "erpnext_items",
+            "erpnext_suppliers",
+            "erpnext_warehouses",
+            "erpnext_uoms",
+        ):
+            try:
+                counts[table] = self.count(table)
+            except Exception as exc:  # debug-only safe guard
+                logger.warning(
+                    "[sqlite-cache-debug] table_counts failed table=%s error=%r",
+                    table,
+                    str(exc),
+                )
+        if counts:
+            logger.info(
+                "[sqlite-cache-debug] table_counts erpnext_items=%s erpnext_suppliers=%s erpnext_warehouses=%s erpnext_uoms=%s",
+                counts.get("erpnext_items"),
+                counts.get("erpnext_suppliers"),
+                counts.get("erpnext_warehouses"),
+                counts.get("erpnext_uoms"),
+            )
 
     def _init_db(self) -> None:
         with self._connect() as conn:
