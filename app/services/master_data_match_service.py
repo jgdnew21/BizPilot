@@ -72,7 +72,7 @@ class MasterDataMatchService:
                 "[master-data-match-debug] match_item query table=erpnext_items fields=item_code,item_name keyword=%r",
                 input_name,
             )
-        rows = self.repository.list_items()
+        rows = self.repository.find_items(input_name) or self.repository.list_items()
         exact = self._exact_matches(
             input_name, rows, ("item_code", "item_name"), normalized=False
         )
@@ -159,7 +159,7 @@ class MasterDataMatchService:
                 message="未提供供应商，且未配置默认供应商",
             )
 
-        rows = self.repository.list_suppliers()
+        rows = self.repository.find_suppliers(effective_input) or self.repository.list_suppliers()
         if settings.debug_master_data_match:
             logger.info(
                 "[master-data-match-debug] match_supplier query table=erpnext_suppliers fields=supplier,supplier_name keyword=%r",
@@ -241,7 +241,7 @@ class MasterDataMatchService:
             )
         matches = self._exact_matches(
             effective_warehouse,
-            self.repository.list_warehouses(),
+            self.repository.find_warehouses(effective_warehouse) or self.repository.list_warehouses(),
             ("warehouse", "warehouse_name"),
             normalized=True,
         )
@@ -271,6 +271,7 @@ class MasterDataMatchService:
         )
 
     def validate_uom(self, uom: str) -> ValidationResult:
+        uom_alias = self._canonical_uom(uom)
         if settings.debug_master_data_match:
             logger.info(
                 "[master-data-match-debug] match_uom start input=%r normalized=%r",
@@ -280,14 +281,14 @@ class MasterDataMatchService:
             logger.info(
                 "[master-data-match-debug] match_uom alias input=%r mapped=%r",
                 uom,
-                uom,
+                uom_alias,
             )
             logger.info(
                 "[master-data-match-debug] match_uom query table=erpnext_uoms fields=uom keyword=%r",
-                uom,
+                uom_alias,
             )
         matches = self._exact_matches(
-            uom, self.repository.list_uoms(), ("uom",), normalized=True
+            uom_alias, self.repository.find_uoms(uom_alias) or self.repository.list_uoms(), ("uom",), normalized=True
         )
         if not matches:
             return ValidationResult(
@@ -546,6 +547,22 @@ class MasterDataMatchService:
             "erp_supplier_name": candidate.get("supplier_name")
             or candidate["supplier"],
         }
+
+
+    def _canonical_uom(self, uom: str) -> str:
+        mapping = {
+            "公斤": "千克",
+            "kg": "千克",
+            "KG": "千克",
+            "Kg": "千克",
+            "千克": "千克",
+            "斤": "斤",
+            "个": "个",
+            "盒": "盒",
+            "箱": "箱",
+        }
+        normalized = (uom or "").strip()
+        return mapping.get(normalized, normalized)
 
     def _display_value(self, row: dict[str, Any], fields: tuple[str, ...]) -> str:
         return str(row.get(fields[0]) or "")
