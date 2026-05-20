@@ -1,3 +1,9 @@
+"""Master data cache repository (SQLite).
+
+ERPNext is the source of truth for Item/Supplier/Warehouse/UOM.
+This repository stores synchronized snapshots in local SQLite for low-latency search/match/validation during prepare.
+No purchase business logic should be implemented here.
+"""
 import json
 import sqlite3
 from datetime import UTC, datetime

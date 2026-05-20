@@ -1,3 +1,7 @@
+"""Routes for syncing ERPNext master data into local cache.
+
+These endpoints are operational tools for cache refresh, not business document creation.
+"""
 from collections.abc import Callable
 
 from fastapi import APIRouter, HTTPException

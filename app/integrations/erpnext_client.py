@@ -1,3 +1,8 @@
+"""ERPNext REST client adapter.
+
+This module only encapsulates transport/auth/pagination concerns.
+Business decisions (matching, validation, prepare/confirm boundaries) must stay in services/workflows.
+"""
 import json
 import logging
 from typing import Any

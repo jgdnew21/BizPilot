@@ -1,3 +1,10 @@
+"""BizPilot FastAPI app entrypoint.
+
+Registers both purchase chains:
+- material request (pre-purchase)
+- purchase inbound (post-purchase receipt draft)
+plus master-data sync/search routes.
+"""
 from fastapi import FastAPI
 
 from app.api.erpnext_sync import router as erpnext_sync_router

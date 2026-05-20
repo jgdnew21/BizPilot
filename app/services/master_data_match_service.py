@@ -1,3 +1,8 @@
+"""Master data matching service over local cache.
+
+Priority strategy: exact -> normalized exact -> fuzzy/contains -> ambiguous/not_found.
+When no unique item can be determined, the service must not auto-select an item.
+"""
 from __future__ import annotations
 
 from difflib import SequenceMatcher
@@ -54,6 +59,7 @@ class MasterDataMatchService:
         ]
 
     def match_item(self, input_name: str) -> MatchResult:
+        """Match item with deterministic priority and avoid unsafe auto-selection."""
         rows = self.repository.list_items()
         exact = self._exact_matches(
             input_name, rows, ("item_code", "item_name"), normalized=False

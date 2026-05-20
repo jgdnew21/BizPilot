@@ -1,3 +1,8 @@
+"""Material Request workflow (pre-purchase requirement path).
+
+This path is parallel to purchase inbound and serves planning-before-purchase.
+Do not mix Material Request with Purchase Receipt semantics.
+"""
 from datetime import date, timedelta, datetime
 
 from app.config import settings

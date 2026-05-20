@@ -171,3 +171,54 @@ BizPilot 安全链路：
 confirm 阶段不再调用 AI，不再解析用户文本，只提交用户已确认的 snapshot。
 
 这是 BizPilot “所见即所写”的核心。
+
+## 采购报单入库 MVP
+
+### BizPilot 采购模块当前能力
+
+#### 1. 采购需求链路（采购前）
+- 路径：`/api/purchase/material-requests/*`
+- 用于“还没买，准备买”的场景，目标是 Material Request。
+
+#### 2. 采购报单入库链路（采购后）
+- 路径：`/api/purchase/inbound/prepare` + `/api/purchase/inbound/confirm`
+- 用于“已经买了/已到货/要登记入库”，目标是 ERPNext Purchase Receipt Draft。
+
+#### 3. 主数据缓存
+- ERPNext 是事实源。
+- BizPilot 将 Item/Supplier/Warehouse/UOM 同步到 SQLite 缓存后再做匹配和校验。
+
+#### 4. 本地运行
+```bash
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn app.main:app --reload --port 8000
+```
+
+#### 5. 本地验证命令
+```bash
+# sync
+curl -X POST http://localhost:8000/api/erpnext/sync/master-data
+
+# search
+curl "http://localhost:8000/api/master-data/items/search?q=鸡蛋"
+
+# prepare
+curl -X POST http://localhost:8000/api/purchase/inbound/prepare -H "Content-Type: application/json" -d '{"session_id":"s1","user_id":"u1","user_name":"测试","source_channel":"wechat","source_type":"text","text":"鲜鸡蛋90斤 4.66元/斤，共419.4元","supplier_name":"市场采购供应商","warehouse":"仓库-华食泰"}'
+
+# confirm
+curl -X POST http://localhost:8000/api/purchase/inbound/confirm -H "Content-Type: application/json" -d '{"session_id":"s1","user_id":"u1","confirm_text":"确认入库","snapshot_id":"替换为prepare返回snapshot_id"}'
+```
+
+#### 6. 设计原则
+- ERPNext 是主数据事实源。
+- BizPilot 是业务解释层和确认快照层。
+- OpenClaw 是对话入口和意图分流层。
+- 所见即所写：Markdown 确认单与 structured payload 一致。
+- confirm 必须基于 snapshot。
+- 只创建 ERPNext Draft，不直接 submit。
+
+更多细节：
+- `docs/master_data_cache.md`
+- `docs/purchase_inbound_flow.md`
+- `docs/local_validation.md`

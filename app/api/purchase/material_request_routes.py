@@ -1,3 +1,7 @@
+"""Routes for Material Request (pre-purchase demand) workflow.
+
+This chain remains available and should not be confused with purchase inbound reporting.
+"""
 from fastapi import APIRouter, HTTPException
 
 from app.config import settings
