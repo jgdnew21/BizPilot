@@ -95,3 +95,20 @@ OpenClaw 在采购场景中**只负责**：
 - 采购报单入库链路展示 `markdown`
 
 禁止向用户展示 `structured_payload` JSON。
+
+## 6. 采购入库 prepare 字段契约
+
+OpenClaw 调用 `POST /api/purchase/inbound/prepare` 时，**推荐传 `text`**：
+
+```json
+{
+  "session_id": "<当前会话ID>",
+  "user_id": "<当前用户ID>",
+  "user_name": "<当前用户名称>",
+  "source_channel": "openclaw",
+  "source_type": "text",
+  "text": "<用户原始报单文本>"
+}
+```
+
+BizPilot Backend 当前兼容 `text` 与 `raw_text`；OpenClaw Skill 推荐传 `text`，后端保存 snapshot 时会统一保留 `raw_text` 用于追溯。

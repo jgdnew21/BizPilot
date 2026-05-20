@@ -201,8 +201,27 @@ class PurchaseInboundWorkflow:
 
     def prepare(self, req: PurchaseInboundPrepareRequest) -> dict[str, Any]:
         """Prepare inbound confirmation markdown and snapshot without writing ERPNext."""
-        parsed_lines = self._parse_lines(req.text)
-        reported_total = self._parse_reported_total(req.text)
+        input_text = req.get_input_text()
+        if not input_text:
+            return {
+                "status": "needs_user_fix",
+                "snapshot_id": "",
+                "markdown": "未收到采购报单文本，请重新发送采购内容。",
+                "validation": {
+                    "status": "failed",
+                    "warnings": [],
+                    "errors": [
+                        ValidationIssue(
+                            type="empty_input_text",
+                            message="未收到采购报单文本，请重新发送采购内容。",
+                        ).model_dump()
+                    ],
+                },
+            }
+
+        normalized_text = self._normalize_prepare_text(input_text)
+        parsed_lines = self._parse_lines(normalized_text)
+        reported_total = self._parse_reported_total(normalized_text)
         errors: list[ValidationIssue] = []
         warnings: list[ValidationIssue] = []
 
@@ -365,7 +384,7 @@ class PurchaseInboundWorkflow:
             source_channel=req.source_channel,
             source_type=req.source_type,
             status=status,
-            raw_text=req.text,
+            raw_text=input_text,
             raw_supplier_name=req.supplier_name,
             erp_supplier_name=structured_payload["supplier"].get("erp_supplier_name"),
             warehouse=structured_payload["warehouse"],
@@ -401,6 +420,12 @@ class PurchaseInboundWorkflow:
             )
         return rows
 
+    def _normalize_prepare_text(self, text: str) -> str:
+        normalized = re.sub(r"[，,]\s*供应商\s*[^\n，,。；;]+", "", text)
+        normalized = normalized.replace("单价", "")
+        normalized = normalized.replace("，", " ").replace(",", " ")
+        return normalized
+
     def _parse_reported_total(self, text: str) -> float | None:
         match = self._TOTAL_PATTERN.search(text)
         return float(match.group("total")) if match else None
@@ -411,7 +436,17 @@ class PurchaseInboundWorkflow:
             cleaned = cleaned.rsplit("：", 1)[-1]
         if ":" in cleaned:
             cleaned = cleaned.rsplit(":", 1)[-1]
-        for prefix in ("今天采购", "采购", "今天", "报单", "入库", "采购报单"):
+        for prefix in (
+            "我今天买了",
+            "我买了",
+            "今天采购",
+            "采购",
+            "今天",
+            "报单",
+            "入库",
+            "采购报单",
+            "买了",
+        ):
             if cleaned.startswith(prefix):
                 cleaned = cleaned[len(prefix) :]
         return cleaned.strip(" ，,。；;：:")
