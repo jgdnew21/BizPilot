@@ -1,3 +1,7 @@
+"""Routes for searching local master-data cache.
+
+All search APIs read local cache only, so user-facing prepare can avoid frequent ERPNext calls.
+"""
 from fastapi import APIRouter, Query
 
 from app.config import settings

@@ -1,3 +1,14 @@
+"""Purchase inbound (post-purchase) workflow.
+
+This workflow handles the reporting-after-purchase path:
+- prepare: parse/match/validate/render markdown/save snapshot
+- confirm: read snapshot and create ERPNext Purchase Receipt draft
+
+Safety boundaries:
+- prepare does NOT write ERPNext.
+- confirm MUST use snapshot and must not re-parse raw user text.
+- create draft only; do not submit automatically.
+"""
 from __future__ import annotations
 
 import re
@@ -43,11 +54,17 @@ class PurchaseInboundWorkflow:
         self,
         match_service: MasterDataMatchService,
         snapshot_service: SnapshotService,
-        erpnext_client: ErpnextClient,
+        erpnext_client: ErpnextClient | None = None,
     ):
         self.match_service = match_service
         self.snapshot_service = snapshot_service
-        self.erpnext_client = erpnext_client
+        # Keep constructor test-friendly: unit tests can build workflow without a real ERP client
+        # when they only validate prepare behavior.
+        self.erpnext_client = erpnext_client or ErpnextClient(
+            settings.erpnext_base_url,
+            settings.erpnext_api_key,
+            settings.erpnext_api_secret,
+        )
 
     @classmethod
     def from_settings(cls) -> "PurchaseInboundWorkflow":
@@ -64,6 +81,11 @@ class PurchaseInboundWorkflow:
         )
 
     def confirm(self, req: PurchaseInboundConfirmRequest) -> dict[str, Any]:
+        """Confirm inbound strictly from snapshot and create ERPNext Purchase Receipt draft.
+
+        Idempotency: if draft was already created for the snapshot, return existing ERP doc name
+        instead of creating a duplicate document.
+        """
         if req.confirm_text.strip() != "确认入库":
             return {
                 "status": "invalid_confirm_text",
@@ -140,6 +162,7 @@ class PurchaseInboundWorkflow:
         )
 
     def _build_purchase_receipt_payload(self, snap: PurchaseSnapshot) -> dict[str, Any]:
+        """Build ERP payload from stored snapshot only (no re-parsing, no re-matching)."""
         structured = snap.structured_payload or {}
         supplier = (structured.get("supplier") or {}).get("erp_supplier_name")
         warehouse = structured.get("warehouse")
@@ -177,6 +200,7 @@ class PurchaseInboundWorkflow:
         }
 
     def prepare(self, req: PurchaseInboundPrepareRequest) -> dict[str, Any]:
+        """Prepare inbound confirmation markdown and snapshot without writing ERPNext."""
         parsed_lines = self._parse_lines(req.text)
         reported_total = self._parse_reported_total(req.text)
         errors: list[ValidationIssue] = []

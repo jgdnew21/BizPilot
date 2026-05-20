@@ -1,3 +1,9 @@
+"""Master data synchronization service.
+
+This service performs full sync from ERPNext to local cache tables
+(erpnext_items / erpnext_suppliers / erpnext_warehouses / erpnext_uoms).
+Syncing master data does not create any ERP business documents.
+"""
 from typing import Any
 
 from app.integrations.erpnext_client import ErpnextClient
@@ -21,6 +27,7 @@ class MasterDataSyncService:
         self.company = company
 
     def sync_all(self) -> dict[str, MasterDataSyncResult]:
+        """Run full sync for all supported master data types."""
         return {
             "items": self.sync_items(),
             "suppliers": self.sync_suppliers(),

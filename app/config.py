@@ -1,3 +1,11 @@
+"""Application configuration for BizPilot.
+
+This module centralizes environment-driven settings used across purchase workflows.
+Important boundaries:
+- ERPNext remains the source of truth for master data and business documents.
+- Local paths (snapshot/cache) are BizPilot-side persistence for confirmation safety and fast matching.
+"""
+
 import os
 from dataclasses import dataclass
 
@@ -8,6 +16,13 @@ load_dotenv()
 
 @dataclass
 class Settings:
+    """Runtime settings loaded from environment variables.
+
+    The purchase inbound MVP relies on two local stores:
+    - MASTER_DATA_CACHE_DB: SQLite cache synced from ERPNext master data.
+    - SNAPSHOT_DIR: confirmation snapshots used to enforce prepare/confirm consistency.
+    """
+
     erpnext_base_url: str = os.getenv("ERPNEXT_BASE_URL", "http://site1.localhost:8080")
     erpnext_api_key: str = os.getenv("ERPNEXT_API_KEY", "")
     erpnext_api_secret: str = os.getenv("ERPNEXT_API_SECRET", "")

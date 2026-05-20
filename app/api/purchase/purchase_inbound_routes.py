@@ -1,3 +1,8 @@
+"""Routes for purchase inbound (post-purchase report -> inbound draft).
+
+- /prepare: generate markdown confirmation + snapshot
+- /confirm: create ERPNext Purchase Receipt draft from snapshot
+"""
 from fastapi import APIRouter
 
 from app.schemas.purchase.purchase_inbound import (
