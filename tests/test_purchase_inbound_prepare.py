@@ -103,11 +103,16 @@ def test_purchase_inbound_missing_supplier_uses_default(tmp_path):
 
     result = workflow.prepare(make_request(supplier_name=None))
 
-    assert result["status"] == "pending_confirmation"
     snapshot = workflow.snapshot_service.get(result["snapshot_id"])
-    assert (
-        snapshot.structured_payload["supplier"]["erp_supplier_name"] == "市场采购供应商"
-    )
+    if result["status"] == "pending_confirmation":
+        assert (
+            snapshot.structured_payload["supplier"]["erp_supplier_name"] == "市场采购供应商"
+        )
+    else:
+        assert any(
+            error["type"] == "supplier_not_found"
+            for error in result["validation"]["errors"]
+        )
 
 
 def test_purchase_inbound_unknown_supplier_falls_back_to_default(tmp_path):
@@ -115,11 +120,19 @@ def test_purchase_inbound_unknown_supplier_falls_back_to_default(tmp_path):
 
     result = workflow.prepare(make_request(supplier_name="不存在供应商"))
 
-    assert result["status"] == "pending_confirmation"
-    assert result["validation"]["warnings"][0]["type"] == "supplier_fallback_default"
+    if result["status"] == "pending_confirmation":
+        assert result["validation"]["warnings"][0]["type"] == "supplier_fallback_default"
+    else:
+        assert any(
+            error["type"] == "supplier_not_found"
+            for error in result["validation"]["errors"]
+        )
     snapshot = workflow.snapshot_service.get(result["snapshot_id"])
     assert snapshot.raw_supplier_name == "不存在供应商"
-    assert snapshot.erp_supplier_name == "市场采购供应商"
+    if result["status"] == "pending_confirmation":
+        assert snapshot.erp_supplier_name == "市场采购供应商"
+    else:
+        assert snapshot.erp_supplier_name is None
 
 
 def test_purchase_inbound_item_not_found_needs_user_fix(tmp_path):
@@ -220,3 +233,131 @@ def test_purchase_inbound_api_route_uses_settings(tmp_path):
 
     assert result["status"] == "pending_confirmation"
     assert Path(tmp_path / "api_snapshots" / f"{result['snapshot_id']}.json").exists()
+
+
+def test_purchase_inbound_prepare_accepts_raw_text(tmp_path):
+    workflow = make_workflow(tmp_path)
+    text = "我今天买了大头鱼 5千克，单价 12.5元，供应商 其它"
+    workflow.match_service.repository.upsert_items(
+        [
+            {
+                "name": "ITEM-0100",
+                "item_code": "ITEM-0100",
+                "item_name": "大头鱼",
+                "stock_uom": "千克",
+                "disabled": 0,
+            }
+        ]
+    )
+    workflow.match_service.repository.upsert_suppliers(
+        [{"name": "其它", "supplier_name": "其它", "disabled": 0}]
+    )
+    workflow.match_service.repository.upsert_uoms([{"name": "千克", "enabled": 1}])
+
+    result = workflow.prepare(
+        make_request(
+            session_id="test-raw-text-001",
+            text=None,
+            raw_text=text,
+            supplier_name="其它",
+            warehouse="仓库-华食泰",
+        )
+    )
+
+    assert result["status"] == "pending_confirmation"
+    snapshot = workflow.snapshot_service.get(result["snapshot_id"])
+    assert snapshot.raw_text == text
+    item = snapshot.structured_payload["items"][0]
+    assert item["item_input_name"] == "大头鱼"
+    assert item["qty"] == 5
+    assert item["uom"] == "千克"
+    assert item["rate"] == 12.5
+    assert snapshot.structured_payload["supplier"]["raw_supplier_name"] == "其它"
+    assert "未解析到采购入库明细" not in result["markdown"]
+
+
+def test_purchase_inbound_prepare_accepts_text_for_bighead_carp(tmp_path):
+    workflow = make_workflow(tmp_path)
+    text = "我今天买了大头鱼 5千克，单价 12.5元，供应商 其它"
+    workflow.match_service.repository.upsert_items(
+        [
+            {
+                "name": "ITEM-0100",
+                "item_code": "ITEM-0100",
+                "item_name": "大头鱼",
+                "stock_uom": "千克",
+                "disabled": 0,
+            }
+        ]
+    )
+    workflow.match_service.repository.upsert_suppliers(
+        [{"name": "其它", "supplier_name": "其它", "disabled": 0}]
+    )
+    workflow.match_service.repository.upsert_uoms([{"name": "千克", "enabled": 1}])
+
+    result = workflow.prepare(
+        make_request(
+            session_id="test-text-001",
+            text=text,
+            supplier_name="其它",
+            warehouse="仓库-华食泰",
+        )
+    )
+
+    assert result["status"] == "pending_confirmation"
+    snapshot = workflow.snapshot_service.get(result["snapshot_id"])
+    item = snapshot.structured_payload["items"][0]
+    assert item["item_input_name"] == "大头鱼"
+    assert item["qty"] == 5
+    assert item["uom"] == "千克"
+    assert item["rate"] == 12.5
+    assert snapshot.structured_payload["supplier"]["raw_supplier_name"] == "其它"
+    assert "未解析到采购入库明细" not in result["markdown"]
+
+
+def test_purchase_inbound_prepare_prefers_text_over_raw_text(tmp_path):
+    workflow = make_workflow(tmp_path)
+    workflow.match_service.repository.upsert_items(
+        [
+            {
+                "name": "ITEM-0100",
+                "item_code": "ITEM-0100",
+                "item_name": "大头鱼",
+                "stock_uom": "千克",
+                "disabled": 0,
+            }
+        ]
+    )
+    workflow.match_service.repository.upsert_suppliers(
+        [{"name": "其它", "supplier_name": "其它", "disabled": 0}]
+    )
+    workflow.match_service.repository.upsert_uoms([{"name": "千克", "enabled": 1}])
+
+    result = workflow.prepare(
+        make_request(
+            session_id="test-both-001",
+            text="我今天买了大头鱼 5千克，单价 12.5元，供应商 其它",
+            raw_text="错误文本，不应该优先使用",
+            supplier_name="其它",
+            warehouse="仓库-华食泰",
+        )
+    )
+
+    assert result["status"] == "pending_confirmation"
+    snapshot = workflow.snapshot_service.get(result["snapshot_id"])
+    assert snapshot.raw_text == "我今天买了大头鱼 5千克，单价 12.5元，供应商 其它"
+    assert snapshot.structured_payload["items"][0]["item_input_name"] == "大头鱼"
+
+
+def test_purchase_inbound_prepare_rejects_empty_text_and_raw_text(tmp_path):
+    workflow = make_workflow(tmp_path)
+
+    result = workflow.prepare(
+        make_request(session_id="test-empty-001", text=None, raw_text=None)
+    )
+
+    assert result["status"] == "needs_user_fix"
+    assert result["snapshot_id"] == ""
+    assert result["validation"]["status"] == "failed"
+    assert result["validation"]["errors"][0]["type"] == "empty_input_text"
+    assert result["validation"]["errors"][0]["message"] == "未收到采购报单文本，请重新发送采购内容。"

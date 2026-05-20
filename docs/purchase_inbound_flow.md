@@ -19,11 +19,13 @@
 
 ## 3. prepare 阶段
 - 接收用户报单。
+- 字段契约：`text` 与 `raw_text` 二选一即可，优先读取 `text`；若两者都为空，返回明确错误。
 - 可解析自然语言或固定格式文本。
 - 生成 `structured_payload`。
 - 做主数据匹配与金额校验。
 - 生成 Markdown 确认单。
 - 保存 snapshot。
+- snapshot 中统一保留 `raw_text` 作为追溯字段（即使请求使用的是 `text`）。
 - **不写 ERPNext**。
 
 ## 4. confirm 阶段
@@ -74,6 +76,17 @@ curl -X POST http://localhost:8000/api/purchase/inbound/prepare \
     "text": "鲜鸡蛋90斤 4.66元/斤，土鸡蛋35斤 5.14元/斤，共599.3元",
     "supplier_name": "市场采购供应商",
     "warehouse": "仓库-华食泰"
+  }'
+
+curl -X POST http://localhost:8000/api/purchase/inbound/prepare \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "debug-inbound-raw-text-001",
+    "user_id": "debug",
+    "user_name": "debug",
+    "source_channel": "debug",
+    "source_type": "text",
+    "raw_text": "我今天买了大头鱼 5千克，单价 12.5元，供应商 其它"
   }'
 
 curl -X POST http://localhost:8000/api/purchase/inbound/confirm \

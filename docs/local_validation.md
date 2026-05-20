@@ -46,7 +46,38 @@ curl "http://localhost:8000/api/master-data/uoms/search?q=斤"
 ```
 
 ## 7) 测试采购报单 prepare
-见 `docs/purchase_inbound_flow.md` 中 prepare 示例。
+```bash
+curl -X POST http://localhost:8000/api/purchase/inbound/prepare \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "debug-inbound-text-001",
+    "user_id": "debug",
+    "user_name": "debug",
+    "source_channel": "debug",
+    "source_type": "text",
+    "text": "我今天买了大头鱼 5千克，单价 12.5元，供应商 其它"
+  }'
+```
+
+兼容 `raw_text` 的历史验证：
+
+```bash
+curl -X POST http://localhost:8000/api/purchase/inbound/prepare \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "debug-inbound-raw-text-001",
+    "user_id": "debug",
+    "user_name": "debug",
+    "source_channel": "debug",
+    "source_type": "text",
+    "raw_text": "我今天买了大头鱼 5千克，单价 12.5元，供应商 其它"
+  }'
+```
+
+说明：
+- OpenClaw 推荐传 `text`。
+- Backend 兼容 `raw_text` 是为了容错和历史兼容。
+- snapshot 中统一保留 `raw_text` 作为追溯字段。
 
 ## 8) 测试采购报单 confirm
 见 `docs/purchase_inbound_flow.md` 中 confirm 示例。
