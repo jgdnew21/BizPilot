@@ -12,6 +12,7 @@ Safety boundaries:
 from __future__ import annotations
 
 import re
+import logging
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
@@ -30,6 +31,7 @@ from app.schemas.purchase.purchase_inbound import (
 from app.services.master_data_match_service import MasterDataMatchService
 from app.services.snapshot_service import SnapshotService
 
+logger = logging.getLogger(__name__)
 
 class PurchaseInboundWorkflow:
     """Prepare purchase-inbound confirmations from plain-text reports.
@@ -86,6 +88,12 @@ class PurchaseInboundWorkflow:
         Idempotency: if draft was already created for the snapshot, return existing ERP doc name
         instead of creating a duplicate document.
         """
+        if settings.debug_purchase_inbound:
+            logger.info(
+                "[purchase-inbound-debug] confirm start session_id=%r snapshot_id=%r",
+                req.session_id,
+                req.snapshot_id,
+            )
         if req.confirm_text.strip() != "确认入库":
             return {
                 "status": "invalid_confirm_text",
@@ -133,6 +141,11 @@ class PurchaseInboundWorkflow:
             snap.submitted_at = datetime.utcnow().isoformat()
             snap.error_message = None
             self.snapshot_service.update(snap)
+            if settings.debug_purchase_inbound:
+                logger.info(
+                    "[purchase-inbound-debug] confirm create_purchase_receipt_draft result name=%r",
+                    pr_name,
+                )
             return {
                 "status": "erp_draft_created",
                 "snapshot_id": snap.snapshot_id,
@@ -202,6 +215,22 @@ class PurchaseInboundWorkflow:
     def prepare(self, req: PurchaseInboundPrepareRequest) -> dict[str, Any]:
         """Prepare inbound confirmation markdown and snapshot without writing ERPNext."""
         input_text = req.get_input_text()
+        if settings.debug_purchase_inbound:
+            input_field = "text" if req.text else ("raw_text" if req.raw_text else "none")
+            logger.info(
+                "[purchase-inbound-debug] input field selected=%s",
+                input_field,
+            )
+            logger.info(
+                "[purchase-inbound-debug] prepare start session_id=%s user_id=%s user_name=%s source=%s/%s input_text=%r input_len=%s",
+                req.session_id,
+                req.user_id,
+                req.user_name,
+                req.source_channel,
+                req.source_type,
+                input_text,
+                len(input_text),
+            )
         if not input_text:
             return {
                 "status": "needs_user_fix",
@@ -239,6 +268,11 @@ class PurchaseInboundWorkflow:
                         message=f"供应商“{req.supplier_name}”不存在，已使用默认供应商",
                     )
                 )
+                if settings.debug_purchase_inbound:
+                    logger.info(
+                        "[purchase-inbound-debug] validation warning code=supplier_fallback_default message=%r source=resolve_supplier",
+                        f"供应商“{req.supplier_name}”不存在，已使用默认供应商",
+                    )
                 supplier_match = default_supplier_match
 
         warehouse_validation = self.match_service.validate_warehouse(
@@ -251,6 +285,12 @@ class PurchaseInboundWorkflow:
                     message=supplier_match.message,
                 )
             )
+            if settings.debug_purchase_inbound:
+                logger.info(
+                    "[purchase-inbound-debug] validation error code=%s message=%r source=validate_supplier",
+                    f"supplier_{supplier_match.status}",
+                    supplier_match.message,
+                )
         if warehouse_validation.status != "matched":
             errors.append(
                 ValidationIssue(
@@ -258,10 +298,20 @@ class PurchaseInboundWorkflow:
                     message=warehouse_validation.message,
                 )
             )
+            if settings.debug_purchase_inbound:
+                logger.info(
+                    "[purchase-inbound-debug] validation error code=warehouse_invalid message=%r source=validate_warehouse",
+                    warehouse_validation.message,
+                )
         if not parsed_lines:
             errors.append(
                 ValidationIssue(type="no_items", message="未解析到采购入库明细")
             )
+            if settings.debug_purchase_inbound:
+                logger.info(
+                    "[purchase-inbound-debug] validation error code=no_items message=%r source=parse_lines",
+                    "未解析到采购入库明细",
+                )
 
         items = []
         calculated_total = Decimal("0")
@@ -287,6 +337,12 @@ class PurchaseInboundWorkflow:
                         type="qty_invalid", message="数量必须大于 0", line_no=line_no
                     )
                 )
+                if settings.debug_purchase_inbound:
+                    logger.info(
+                        "[purchase-inbound-debug] validation error code=qty_invalid message=%r source=validate_items line_index=%s",
+                        "数量必须大于 0",
+                        line_no - 1,
+                    )
             if rate < 0:
                 line_errors.append("单价不能小于 0")
                 errors.append(
@@ -294,6 +350,12 @@ class PurchaseInboundWorkflow:
                         type="rate_invalid", message="单价不能小于 0", line_no=line_no
                     )
                 )
+                if settings.debug_purchase_inbound:
+                    logger.info(
+                        "[purchase-inbound-debug] validation error code=rate_invalid message=%r source=validate_items line_index=%s",
+                        "单价不能小于 0",
+                        line_no - 1,
+                    )
             if abs(amount - expected_amount) > Decimal("0.01"):
                 message = f"明细金额 {self._format_money(amount)} 与数量×单价 {self._format_money(expected_amount)} 不一致"
                 line_errors.append(message)
@@ -302,6 +364,12 @@ class PurchaseInboundWorkflow:
                         type="line_amount_mismatch", message=message, line_no=line_no
                     )
                 )
+                if settings.debug_purchase_inbound:
+                    logger.info(
+                        "[purchase-inbound-debug] validation error code=line_amount_mismatch message=%r source=validate_items line_index=%s",
+                        message,
+                        line_no - 1,
+                    )
             if item_match.status != "matched":
                 message = self._item_error_message(row["item_input_name"], item_match)
                 line_errors.append(message)
@@ -312,6 +380,13 @@ class PurchaseInboundWorkflow:
                         line_no=line_no,
                     )
                 )
+                if settings.debug_purchase_inbound:
+                    logger.info(
+                        "[purchase-inbound-debug] validation error code=%s message=%r source=validate_items line_index=%s",
+                        f"item_{item_match.status}",
+                        message,
+                        line_no - 1,
+                    )
             if uom_validation.status != "matched":
                 line_errors.append(uom_validation.message)
                 errors.append(
@@ -321,6 +396,12 @@ class PurchaseInboundWorkflow:
                         line_no=line_no,
                     )
                 )
+                if settings.debug_purchase_inbound:
+                    logger.info(
+                        "[purchase-inbound-debug] validation error code=uom_invalid message=%r source=validate_uom line_index=%s",
+                        uom_validation.message,
+                        line_no - 1,
+                    )
 
             validation_status = "passed" if not line_errors else "failed"
             items.append(
@@ -350,6 +431,11 @@ class PurchaseInboundWorkflow:
                     message=f"报单合计 {self._format_money(Decimal(str(reported_total)))} 与系统计算合计 {self._format_money(calculated_total)} 不一致",
                 )
             )
+            if settings.debug_purchase_inbound:
+                logger.info(
+                    "[purchase-inbound-debug] validation warning code=reported_total_mismatch message=%r source=validate_total",
+                    f"报单合计 {self._format_money(Decimal(str(reported_total)))} 与系统计算合计 {self._format_money(calculated_total)} 不一致",
+                )
 
         status = "needs_user_fix" if errors else "pending_confirmation"
         validation = {
@@ -374,6 +460,16 @@ class PurchaseInboundWorkflow:
             structured_payload=structured_payload,
             validation=validation,
         )
+        if settings.debug_purchase_inbound:
+            logger.info(
+                "[purchase-inbound-debug] prepare result status=%s items_count=%s errors_count=%s warnings_count=%s confirmable=%s markdown_len=%s",
+                status,
+                len(items),
+                len(errors),
+                len(warnings),
+                status == "pending_confirmation",
+                len(markdown),
+            )
         snapshot_id = self._generate_snapshot_id()
         snapshot = PurchaseSnapshot(
             snapshot_id=snapshot_id,
@@ -393,6 +489,16 @@ class PurchaseInboundWorkflow:
             validation_result=validation,
         )
         self.snapshot_service.save(snapshot)
+        if settings.debug_purchase_inbound:
+            logger.info(
+                "[purchase-inbound-debug] snapshot saved snapshot_id=%r session_id=%r status=%r items_count=%s raw_text_len=%s markdown_len=%s storage=snapshot_repository",
+                snapshot_id,
+                req.session_id,
+                status,
+                len(items),
+                len(input_text),
+                len(markdown),
+            )
         return {
             "status": status,
             "snapshot_id": snapshot_id,
@@ -577,3 +683,32 @@ class PurchaseInboundWorkflow:
 
     def _generate_snapshot_id(self) -> str:
         return f"pin_{datetime.utcnow().strftime('%Y%m%d')}_{uuid4().hex[:6]}"
+        if settings.debug_purchase_inbound and snap:
+            logger.info(
+                "[purchase-inbound-debug] confirm snapshot loaded snapshot_id=%r status=%r items_count=%s",
+                snap.snapshot_id,
+                snap.status,
+                len((snap.structured_payload or {}).get("items") or []),
+            )
+        if settings.debug_purchase_inbound:
+            logger.info(
+                "[purchase-inbound-debug] parsed supplier=%r warehouse=%r items_count=%s",
+                req.supplier_name,
+                req.warehouse or settings.default_purchase_warehouse,
+                len(parsed_lines),
+            )
+            for idx, row in enumerate(parsed_lines):
+                logger.info(
+                    "[purchase-inbound-debug] parsed item[%s] name=%r qty=%s uom=%r rate=%s amount=%s",
+                    idx,
+                    row.get("item_input_name"),
+                    row.get("qty"),
+                    row.get("uom"),
+                    row.get("rate"),
+                    row.get("amount"),
+                )
+            if not parsed_lines:
+                logger.info(
+                    "[purchase-inbound-debug] parsed items empty, input_text=%r",
+                    input_text,
+                )

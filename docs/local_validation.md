@@ -97,3 +97,43 @@ curl -X POST http://localhost:8000/api/purchase/inbound/prepare \
 - 仓库不存在
 - 供应商不存在
 - 重复 confirm 不应重复创建 Purchase Receipt
+
+## 11) 采购报单主数据匹配诊断日志
+当 prepare 阶段提示商品、供应商、仓库或单位找不到，但确认 SQLite 中已有数据时，可在 `.env` 打开：
+
+```env
+BIZPILOT_DEBUG_PURCHASE_INBOUND=true
+BIZPILOT_DEBUG_MASTER_DATA_MATCH=true
+BIZPILOT_DEBUG_SQLITE_CACHE=true
+```
+
+默认值均为 `false`，仅在排查时开启。
+
+重启 Backend：
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+测试：
+
+```bash
+curl -X POST http://localhost:8000/api/purchase/inbound/prepare \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "debug-cache-001",
+    "user_id": "debug",
+    "user_name": "debug",
+    "source_channel": "debug",
+    "source_type": "text",
+    "text": "我今天买了大头鱼 1千克，单价 12.5元，供应商 其它"
+  }'
+```
+
+重点查看日志：
+
+- `[sqlite-cache-debug] MASTER_DATA_CACHE_DB ...`
+- `[sqlite-cache-debug] table_counts ...`
+- `[master-data-match-debug] match_item ...`
+- `[master-data-match-debug] match_supplier ...`
+- `[purchase-inbound-debug] validation error ...`
