@@ -361,3 +361,52 @@ def test_purchase_inbound_prepare_rejects_empty_text_and_raw_text(tmp_path):
     assert result["validation"]["status"] == "failed"
     assert result["validation"]["errors"][0]["type"] == "empty_input_text"
     assert result["validation"]["errors"][0]["message"] == "未收到采购报单文本，请重新发送采购内容。"
+
+
+def test_purchase_inbound_sqlite_match_fish_and_other_supplier(tmp_path):
+    workflow = make_workflow(tmp_path)
+    workflow.match_service.repository.upsert_items(
+        [{"name": "大头鱼", "item_code": "大头鱼", "item_name": "大头鱼", "stock_uom": "千克", "disabled": 0}]
+    )
+    workflow.match_service.repository.upsert_suppliers(
+        [{"name": "其它", "supplier_name": "其它", "disabled": 0}]
+    )
+    workflow.match_service.repository.upsert_warehouses(
+        [{"name": "南宁仓 - 艾达D", "warehouse_name": "南宁仓 - 艾达D", "disabled": 0, "is_group": 0}]
+    )
+    workflow.match_service.repository.upsert_uoms([{"name": "千克", "enabled": 1}])
+
+    old_wh = settings.default_purchase_warehouse
+    try:
+        settings.default_purchase_warehouse = "南宁仓 - 艾达D"
+        result = workflow.prepare(
+            make_request(
+                text="我今天买了大头鱼 1千克，单价 12.5元，供应商 其它",
+                supplier_name="其它",
+                warehouse=None,
+            )
+        )
+    finally:
+        settings.default_purchase_warehouse = old_wh
+
+    assert result["status"] == "pending_confirmation"
+    assert result["validation"]["status"] == "passed"
+    snapshot = workflow.snapshot_service.get(result["snapshot_id"])
+    item = snapshot.structured_payload["items"][0]
+    assert item["item_code"] == "大头鱼"
+    assert item["uom"] == "千克"
+    assert snapshot.structured_payload["supplier"]["erp_supplier_name"] == "其它"
+    assert snapshot.structured_payload["warehouse"] == "南宁仓 - 艾达D"
+
+
+def test_purchase_inbound_prepare_does_not_require_json_master_files(tmp_path):
+    old_master_dir = settings.master_data_dir
+    settings.master_data_dir = str(tmp_path / "missing_master_data")
+    try:
+        workflow = make_workflow(tmp_path)
+        result = workflow.prepare(make_request())
+    finally:
+        settings.master_data_dir = old_master_dir
+
+    assert result["status"] == "pending_confirmation"
+    assert result["validation"]["status"] == "passed"

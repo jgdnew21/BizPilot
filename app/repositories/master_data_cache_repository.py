@@ -274,6 +274,39 @@ class MasterDataCacheRepository:
             )
         return len(payload)
 
+
+    def find_items(self, keyword: str) -> list[dict[str, Any]]:
+        return self._find_by_keyword(
+            table_name="erpnext_items",
+            fields=("item_code", "item_name"),
+            keyword=keyword,
+            order_by="item_code",
+        )
+
+    def find_suppliers(self, keyword: str) -> list[dict[str, Any]]:
+        return self._find_by_keyword(
+            table_name="erpnext_suppliers",
+            fields=("supplier", "supplier_name"),
+            keyword=keyword,
+            order_by="supplier",
+        )
+
+    def find_warehouses(self, keyword: str) -> list[dict[str, Any]]:
+        return self._find_by_keyword(
+            table_name="erpnext_warehouses",
+            fields=("warehouse", "warehouse_name"),
+            keyword=keyword,
+            order_by="warehouse",
+        )
+
+    def find_uoms(self, keyword: str) -> list[dict[str, Any]]:
+        return self._find_by_keyword(
+            table_name="erpnext_uoms",
+            fields=("uom",),
+            keyword=keyword,
+            order_by="uom",
+        )
+
     def list_items(self) -> list[dict[str, Any]]:
         return self._fetch_all("erpnext_items", "item_code")
 
@@ -303,6 +336,29 @@ class MasterDataCacheRepository:
         with self._connect() as conn:
             rows = conn.execute(
                 f"SELECT * FROM {table_name} ORDER BY {order_by}"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+
+    def _find_by_keyword(
+        self,
+        table_name: str,
+        fields: tuple[str, ...],
+        keyword: str,
+        order_by: str,
+    ) -> list[dict[str, Any]]:
+        normalized = (keyword or "").strip()
+        if not normalized:
+            return self._fetch_all(table_name, order_by)
+
+        field_sql = " OR ".join([f"{field} = ? COLLATE NOCASE" for field in fields])
+        like_sql = " OR ".join([f"{field} LIKE ? COLLATE NOCASE" for field in fields])
+        params = [normalized] * len(fields) + [f"%{normalized}%"] * len(fields)
+
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM {table_name} WHERE ({field_sql}) OR ({like_sql}) ORDER BY {order_by}",
+                params,
             ).fetchall()
         return [dict(row) for row in rows]
 
